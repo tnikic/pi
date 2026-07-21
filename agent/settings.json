@@ -1,0 +1,8 @@
+{
+  "lastChangelogVersion": "0.80.10",
+  "theme": "dark",
+  "hideThinkingBlock": true,
+  "defaultProvider": "opencode-go",
+  "defaultModel": "qwen3.7-plus",
+  "defaultThinkingLevel": "high"
+}
