@@ -1,3 +1,5 @@
 **/sessions/
 **/models-store.json
 **/auth.json
+node_modules/
+containers/searxng/settings.yml

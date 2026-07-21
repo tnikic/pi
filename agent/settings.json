@@ -3,6 +3,6 @@
   "theme": "dark",
   "hideThinkingBlock": true,
   "defaultProvider": "opencode-go",
-  "defaultModel": "qwen3.7-plus",
+  "defaultModel": "deepseek-v4-pro",
   "defaultThinkingLevel": "high"
 }
