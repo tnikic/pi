@@ -1,8 +1,8 @@
 {
-  "lastChangelogVersion": "0.80.10",
-  "theme": "dark",
-  "hideThinkingBlock": true,
-  "defaultProvider": "opencode-go",
-  "defaultModel": "deepseek-v4-pro",
-  "defaultThinkingLevel": "high"
+	"lastChangelogVersion": "0.80.10",
+	"theme": "dark",
+	"hideThinkingBlock": true,
+	"defaultProvider": "opencode-go",
+	"defaultModel": "deepseek-v4-pro",
+	"defaultThinkingLevel": "high"
 }
