@@ -8,6 +8,8 @@ A loose idea has arrived — too big for one agent session, and wrapped in fog: 
 
 The destination varies per effort, and naming it is the first act of charting — it shapes every ticket. It might be a spec to hand off and iterate on, a decision to lock before planning starts, or a change made in place like a data-structure migration. The map is domain-agnostic — engineering work, course content, whatever fits the shape.
 
+This skill assumes your harness can interact with a project issue tracker. If you're unsure, run `/bootstrap` to verify.
+
 ## Plan, don't do
 
 Wayfinder is **planning** by default: each ticket resolves a decision, and the map is done when the way is clear — nothing left to decide before someone goes and does the thing. The pull to just do the work is usually the signal you've reached the edge of the map and it's time to hand off. An effort can override this in its **Notes** — carrying execution into the map itself — but absent that, produce decisions, not deliverables.
@@ -22,7 +24,14 @@ The map is a single issue on this repo's issue tracker, labelled `wayfinder:map`
 
 The map is an **index**, not a store. It lists the decisions made and points at the tickets that hold their detail; a decision lives in exactly one place — its ticket — so the map never restates it, only gists it and links.
 
-**Where the map, its child tickets, blocking, and frontier queries physically live is tracker-specific.** The issue tracker should have been provided to you — run `/bootstrap` if not. Consult the tracker doc's "Wayfinding operations" section for how _this_ repo expresses them. If no tracker has been provided, default to the local-markdown tracker.
+The harness provides the operations that drive the map:
+
+- **Map**: create an issue with label `wayfinder:map` (scope `wayfinder`, name `map`).
+- **Child ticket**: create an issue with `parent` set to the map's number and a `wayfinder:<type>` label (scope `wayfinder`, name matching the type).
+- **Blocking**: set `blocked_by` on the ticket — a set-replacement of the blocker issue numbers.
+- **Frontier**: list issues with `parent: <map>`, `state: "open"`, `unblocked: true`, `assignee: "@unassigned"`.
+- **Claim**: update the issue with `assignee: "@me"` — the session's first write.
+- **Resolve**: comment the answer on the ticket, close the ticket, then append a context pointer to the map's Decisions-so-far.
 
 ### The map body
 
@@ -66,7 +75,7 @@ Each ticket carries a `wayfinder:<type>` label — one of `research`, `prototype
 
 A session **claims** a ticket by assigning it to the dev driving the map, **first**, before any work, so concurrent sessions skip it. That assignee _is_ the claim: an open, unassigned ticket is unclaimed.
 
-Blocking uses the tracker's **native** dependency relationship — essential because it renders the frontier _visually_ in the tracker's own UI, so the human sees what's takeable without opening the map. Only a tracker that lacks native blocking falls back to a body convention. A ticket is **unblocked** when every ticket blocking it is closed; the **frontier** is the open, unblocked, unclaimed children — the edge of the known.
+A ticket is **unblocked** when every ticket blocking it is closed; the **frontier** is the open, unblocked, unclaimed children — the edge of the known.
 
 The answer isn't part of the body — it's recorded on resolution (see [Work through the map](#work-through-the-map)). Assets created while resolving a ticket are linked from the issue, not pasted in.
 
