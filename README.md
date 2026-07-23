@@ -79,7 +79,7 @@ Skills provide specialized instructions that guide the agent's behavior for spec
 
 | Skill | Description |
 |-------|-------------|
-| **bootstrap** | Configure a repo for the engineering skills — issue tracker, triage labels, domain doc layout |
+| **bootstrap** | Verify the issue tracker is reachable and set up domain doc layout |
 | **codebase-design** | Shared vocabulary for designing deep modules — interfaces, seams, testability |
 | **code-review** | Review changes since a fixed point along Standards and Spec axes |
 | **diagnosing-bugs** | Diagnosis loop for hard bugs and performance regressions |
