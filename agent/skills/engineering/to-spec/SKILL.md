@@ -16,7 +16,7 @@ This skill assumes your harness can interact with a project issue tracker. If yo
 
 Check with the user that these seams match their expectations.
 
-3. Write the spec using the template below, then publish it to the project issue tracker. Apply the `ready-for-agent` triage label - no need for additional triage.
+3. Write the spec using the template below, then publish it to the project issue tracker. Apply three scoped labels — `triage:for-agent` (scope `triage`, name `for-agent`), `kind:spec` (scope `kind`, name `spec`), and `type:enhancement` (scope `type`, name `enhancement`) — no need for additional triage.
 
 <spec-template>
 

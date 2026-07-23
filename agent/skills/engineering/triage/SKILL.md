@@ -19,28 +19,43 @@ Every comment or issue posted to the issue tracker during triage **must** start 
 - [AGENT-BRIEF.md](AGENT-BRIEF.md) — how to write durable agent briefs
 - [OUT-OF-SCOPE.md](OUT-OF-SCOPE.md) — how the `docs/out-of-scope/` knowledge base works
 
-## Roles
+## Labels
 
-Two **category** roles:
+This skill manages labels across three scopes. All scopes are **exclusive** — only one label per scope per issue.
 
-- `bug` — something is broken
-- `enhancement` — new feature or improvement
+### `triage:*` — triage workflow state (blue `#1a56db`)
 
-Five **state** roles:
+- `triage:pending` — maintainer needs to evaluate
+- `triage:unanswered` — waiting on reporter for more information
+- `triage:for-agent` — fully specified, ready for an AFK agent
+- `triage:for-human` — needs human implementation
+- `triage:wontfix` — will not be actioned
 
-- `needs-triage` — maintainer needs to evaluate
-- `needs-info` — waiting on reporter for more information
-- `ready-for-agent` — fully specified, ready for an AFK agent
-- `ready-for-human` — needs human implementation
-- `wontfix` — will not be actioned
+Every triaged issue carries exactly one `triage:*` label.
 
-Every triaged issue should carry exactly one category role and one state role. If state roles conflict, flag it and ask the maintainer before doing anything else.
+### `type:*` — nature of the work (red `#d73a4a`)
 
-These are canonical role names — the actual label strings used in the issue tracker may differ (see `docs/agents/triage-labels.md` if `/bootstrap` has been run).
+- `type:bug` — something is broken
+- `type:enhancement` — new feature or improvement
+
+Every triaged issue carries exactly one `type:*` label.
+
+### `kind:*` — artifact shape (purple `#6f42c1`)
+
+- `kind:spec` — a planning document with problem, solution, and user stories
+- `kind:ticket` — a single unit of agent-sized work
+- `kind:map` — a wayfinder planning map
+- `kind:decision` — a question whose resolution is a decision
+
+The triage agent determines `kind:spec` vs `kind:ticket` during evaluation: `kind:spec` when the work needs planning before building, `kind:ticket` when the build is the plan and it fits in one session.
+
+Scoped labels use the notation `scope:name`. When calling tracker tools, always pass them as structured labels — `{scope: "scope", name: "name"}` — not as a flat string with a colon.
+
+---
 
 This skill assumes your harness can interact with a project issue tracker. If you're unsure, run `/bootstrap` to verify.
 
-State transitions: an unlabeled issue normally goes to `needs-triage` first; from there it moves to `needs-info`, `ready-for-agent`, `ready-for-human`, or `wontfix`. `needs-info` returns to `needs-triage` once the reporter replies. The maintainer can override at any time — flag transitions that look unusual and ask before proceeding.
+State transitions: an unlabeled issue normally goes to `triage:pending` first; from there it moves to `triage:unanswered`, `triage:for-agent`, `triage:for-human`, or `triage:wontfix`. `triage:unanswered` returns to `triage:pending` once the reporter replies. The maintainer can override at any time — flag transitions that look unusual and ask before proceeding.
 
 ## Invocation
 
@@ -48,7 +63,7 @@ The maintainer invokes `/triage` and describes what they want in natural languag
 
 - "Show me anything that needs my attention"
 - "Let's look at #42"
-- "Move #42 to ready-for-agent"
+- "Move #42 to triage:for-agent"
 - "What's ready for agents to pick up?"
 
 ## Show what needs attention
@@ -56,8 +71,8 @@ The maintainer invokes `/triage` and describes what they want in natural languag
 Query the issue tracker and present three buckets, oldest first:
 
 1. **Unlabeled** — never triaged.
-2. **`needs-triage`** — evaluation in progress.
-3. **`needs-info` with reporter activity since the last triage notes** — needs re-evaluation.
+2. **`triage:pending`** — evaluation in progress.
+3. **`triage:unanswered` with reporter activity since the last triage notes** — needs re-evaluation.
 
 Show counts and a one-line summary per item. Let the maintainer pick.
 
@@ -65,27 +80,32 @@ Show counts and a one-line summary per item. Let the maintainer pick.
 
 1. **Gather context.** Read the full issue (body, comments, labels, author, dates). Parse any prior triage notes so you don't re-ask resolved questions. Explore the codebase using the project's domain glossary, respecting ADRs in the area. Run two checks against the codebase: (a) **redundancy** — search for an existing implementation of the requested behavior by domain concept (not just the request's wording), and report where you looked. If found, it's an already-implemented `wontfix` (step 5). (b) **prior rejection** — read `docs/out-of-scope/*.md` and surface any that resembles this request.
 
-2. **Recommend.** Tell the maintainer your category and state recommendation with reasoning, plus a brief codebase summary relevant to the request — including whether it's already implemented. Wait for direction.
+2. **Recommend.** Tell the maintainer your recommendation with reasoning, plus a brief codebase summary relevant to the request — including whether it's already implemented. Recommend all three label axes:
+   - `type:*` — `type:bug` or `type:enhancement`
+   - `kind:*` — `kind:spec` (needs planning before building) or `kind:ticket` (the build is the plan, fits one session)
+   - `triage:*` — the appropriate state
+   
+   Wait for direction.
 
-3. **Verify the claim.** Before any grilling, check that the claim holds up. For a bug, reproduce it from the reporter's steps. Report what happened: confirmed (with code path), failed, or insufficient detail (a strong `needs-info` signal). A confirmed verification makes a much stronger agent brief.
+3. **Verify the claim.** Before any grilling, check that the claim holds up. For a bug, reproduce it from the reporter's steps. Report what happened: confirmed (with code path), failed, or insufficient detail (a strong `triage:unanswered` signal). A confirmed verification makes a much stronger agent brief.
 
 4. **Grill (if needed).** If the request needs fleshing out, run the `/grilling` and `/domain-modeling` skills together — grill it into shape one question at a time, sharpening domain terms and updating `docs/CONTEXT.md`/ADRs inline as decisions land.
 
 5. **Apply the outcome:**
-   - `ready-for-agent` — post an agent brief comment ([AGENT-BRIEF.md](AGENT-BRIEF.md)).
-   - `ready-for-human` — same structure as an agent brief, but note why it can't be delegated (judgment calls, external access, design decisions, manual testing).
-   - `needs-info` — post triage notes (template below).
-   - `wontfix` — close, with the comment depending on *why*:
+   - `triage:for-agent` — apply the label plus the confirmed `type:*` and `kind:*`, then post an agent brief comment ([AGENT-BRIEF.md](AGENT-BRIEF.md)).
+   - `triage:for-human` — apply the label plus the confirmed `type:*` and `kind:*`. Same structure as an agent brief, but note why it can't be delegated (judgment calls, external access, design decisions, manual testing).
+   - `triage:unanswered` — post triage notes (template below).
+   - `triage:wontfix` — close, with the comment depending on *why*:
      - **Already implemented** — the change already exists in the codebase. Point to where it lives; do **not** write to `docs/out-of-scope/` (that KB is for *rejected* requests, not built ones).
      - **Rejected (bug)** — polite explanation, then close.
      - **Rejected (enhancement)** — write to `docs/out-of-scope/`, link to it from a comment, then close ([OUT-OF-SCOPE.md](OUT-OF-SCOPE.md)).
-   - `needs-triage` — apply the role. Optional comment if there's partial progress.
+   - `triage:pending` — apply the label. Optional comment if there's partial progress.
 
 ## Quick state override
 
-If the maintainer says "move #42 to ready-for-agent", trust them and apply the role directly. Confirm what you're about to do (role changes, comment, close), then act. Skip grilling. If moving to `ready-for-agent` without a grilling session, ask whether they want to write an agent brief.
+If the maintainer says "move #42 to triage:for-agent" (or any other `triage:*` state), trust them and apply the role directly. Confirm what you're about to do (role changes, comment, close), then act. Skip grilling. If moving to `triage:for-agent` without a grilling session, ask whether they want to write an agent brief.
 
-## Needs-info template
+## Unanswered template (triage:unanswered)
 
 ```markdown
 ## Triage Notes

@@ -20,14 +20,14 @@ Every map and ticket is an issue, so it has a **name** — its title. In everyth
 
 ## The Map
 
-The map is a single issue on this repo's issue tracker, labelled `wayfinder:map` — the canonical artifact. Its tickets are child issues of the map.
+The map is a single issue on this repo's issue tracker, labelled `kind:map` — the canonical artifact. Its tickets are child issues of the map.
 
 The map is an **index**, not a store. It lists the decisions made and points at the tickets that hold their detail; a decision lives in exactly one place — its ticket — so the map never restates it, only gists it and links.
 
 The harness provides the operations that drive the map:
 
-- **Map**: create an issue with label `wayfinder:map` (scope `wayfinder`, name `map`).
-- **Child ticket**: create an issue with `parent` set to the map's number and a `wayfinder:<type>` label (scope `wayfinder`, name matching the type).
+- **Map**: create an issue with label `kind:map` (scope `kind`, name `map`).
+- **Child ticket**: create an issue with `parent` set to the map's number, labelled `kind:decision` (scope `kind`, name `decision`) and `wayfinder:<type>` (scope `wayfinder`, name matching the type).
 - **Blocking**: set `blocked_by` on the ticket — a set-replacement of the blocker issue numbers.
 - **Frontier**: list issues with `parent: <map>`, `state: "open"`, `unblocked: true`, `assignee: "@unassigned"`.
 - **Claim**: update the issue with `assignee: "@me"` — the session's first write.
@@ -71,7 +71,7 @@ Each ticket is a **child issue** of the map; the tracker's issue id is its ident
 <the decision or investigation this ticket resolves>
 ```
 
-Each ticket carries a `wayfinder:<type>` label — one of `research`, `prototype`, `grilling`, `task` (see [Ticket Types](#ticket-types)).
+Each ticket carries `kind:decision` and a `wayfinder:<type>` label — one of `research`, `prototype`, `grilling` (see [Ticket Types](#ticket-types)).
 
 A session **claims** a ticket by assigning it to the dev driving the map, **first**, before any work, so concurrent sessions skip it. That assignee _is_ the claim: an open, unassigned ticket is unclaimed.
 
@@ -86,7 +86,7 @@ Every ticket is either **HITL** — human in the loop, worked *with* a human who
 - **Research** (AFK): Reading documentation, third-party APIs, or local resources like knowledge bases to surface a fact a decision waits on. Resolved by a `/research` **subagent**. Use when knowledge outside the current working directory is required.
 - **Prototype** (HITL): Raise the fidelity of the discussion by making a cheap, rough, concrete artifact to react to — an outline, a rough take, a stub, or UI/logic code via the /prototype skill. Links the prototype as an asset. Use when "how should it look" or "how should it behave" is the key question.
 - **Grilling** (HITL): Conversation via the /grilling and /domain-modeling skills, one question at a time. The default case.
-- **Task** (HITL or AFK): Manual work that must happen before a *decision* can be made — nothing to decide, prototype, or research, but the discussion is blocked until it's done. Signing up for a service so its API can be judged, provisioning access, moving data so its shape can be seen. This is the one type that *does* rather than decides — and it earns its place by unblocking a decision, not by delivering the destination. The agent drives it alone where it can (AFK); otherwise it hands the human a precise checklist (HITL). Resolved when the work is done; the answer records what was done and any resulting facts (credentials location, new URLs, row counts) later tickets depend on.
+When a decision is blocked by work that must be *executed* before it can be resolved — signing up for a service so its API can be judged, provisioning access, moving data so its shape can be seen — that work is a regular `kind:ticket` (scope `kind`, name `ticket`), not a child of the map. Create it on the tracker, then set the decision's `blocked_by` to reference it. The map holds only decisions; execution lives outside.
 
 ## Fog of war
 
@@ -119,8 +119,8 @@ User invokes with a loose idea.
 
 1. **Name the destination.** Run a `/grilling` and `/domain-modeling` session to pin down what this map is finding its way to — the spec, decision, or change. The destination fixes the scope, so it's settled first.
 2. **Map the frontier.** Grill again, **breadth-first** this time: fan out across the whole space rather than deep on any one thread, surfacing the open decisions and the first steps takeable now. **If this surfaces no fog** — the way to the destination is already clear, the whole journey small enough for one session — you don't need a map. Stop and ask the user how they'd like to proceed.
-3. **Create the map** (label `wayfinder:map`): Destination and Notes filled in, Decisions-so-far empty, the fog sketched into **Not yet specified**.
-4. **Create the tickets you can specify now** as child issues of the map — then wire blocking edges in a **second pass** (issues need ids before they can reference each other). Wiring sorts them into the frontier and the blocked; everything you can't yet specify stays in the fog — the **Not yet specified** section.
+3. **Create the map** (label `kind:map`): Destination and Notes filled in, Decisions-so-far empty, the fog sketched into **Not yet specified**.
+4. **Create the tickets you can specify now** as child issues of the map, each labelled `kind:decision` and the appropriate `wayfinder:<type>` — then wire blocking edges in a **second pass** (issues need ids before they can reference each other). Wiring sorts them into the frontier and the blocked; everything you can't yet specify stays in the fog — the **Not yet specified** section.
 5. **Fire the research subagents.** For each `research` ticket you just created, spin up a `/research` subagent to resolve it in parallel, capturing its findings on a throwaway `research/<name>` branch with a context pointer from the ticket.
 6. Stop — charting is one session's work; it hand-resolves nothing.
 
