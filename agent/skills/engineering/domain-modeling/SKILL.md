@@ -41,7 +41,13 @@ If a `docs/CONTEXT-MAP.md` exists, the repo has multiple contexts. The map point
 
 Create files lazily — only when you have something to write. If no `docs/CONTEXT.md` exists, create one when the first term is resolved. If no `docs/adr/` exists, create it when the first ADR is needed.
 
+When you're exploring the codebase for another skill (not actively domain-modeling) and these files don't exist yet, **proceed silently**. Don't flag their absence or suggest creating them upfront — that's domain-modeling's job when the time is right.
+
 ## During the session
+
+### Use the glossary's vocabulary
+
+In your own output — issue titles, refactor proposals, hypotheses, test names, any artifact that names a domain concept — use the term exactly as defined in `docs/CONTEXT.md`. Don't drift to synonyms the glossary explicitly avoids.
 
 ### Challenge against the glossary
 
@@ -54,6 +60,12 @@ When the user uses vague or overloaded terms, propose a precise canonical term. 
 ### Discuss concrete scenarios
 
 When domain relationships are being discussed, stress-test them with specific scenarios. Invent scenarios that probe edge cases and force the user to be precise about the boundaries between concepts.
+
+### Flag ADR conflicts
+
+When your output — a spec, a ticket, a refactor proposal, a hypothesis, any artifact — contradicts an existing ADR, surface it explicitly rather than silently overriding:
+
+> _Contradicts ADR-0007 (event-sourced orders) — but worth reopening because…_
 
 ### Cross-reference with code
 

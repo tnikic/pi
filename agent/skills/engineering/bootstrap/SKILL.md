@@ -6,12 +6,9 @@ disable-model-invocation: true
 
 # Bootstrap
 
-Scaffold the per-repo configuration that the engineering skills assume:
+Verify the issue tracker is reachable and confirm the domain doc layout for this repo. Run once before first use of the other engineering skills.
 
-- **Issue tracker** — verify the harness can interact with this repo's issue tracker
-- **Domain docs** — where `docs/CONTEXT.md` and ADRs live, and the consumer rules for reading them
-
-This is a prompt-driven skill, not a deterministic script. Explore, present what you found, confirm with the user, then write.
+This is a prompt-driven skill, not a deterministic script. Explore, present what you found, and confirm with the user. Domain docs (`docs/CONTEXT.md`, `docs/adr/`) are created lazily by `/domain-modeling` when the first term or decision is resolved — bootstrap only confirms which layout the repo will use.
 
 ## Process
 
@@ -27,7 +24,6 @@ Look at the current repo to understand its starting state. Read whatever exists;
 
 - `docs/CONTEXT.md` and `docs/CONTEXT-MAP.md`
 - `docs/adr/` and any `src/*/docs/adr/` directories
-- `docs/agents/` — does this skill's prior output already exist?
 - Monorepo signals — a `pnpm-workspace.yaml`, a `workspaces` field in `package.json`, or a populated `packages/*` with its own `src/`. Present only in a genuinely large multi-package repo; their absence means single-context, which is almost every repo.
 
 ### 3. Present findings and ask
@@ -40,14 +36,6 @@ Lead with the recommended answer so the user can accept it in a word. Give a one
 
 Offer **multi-context** — a root `docs/CONTEXT-MAP.md` pointing to per-context `docs/CONTEXT.md` files — only when exploration found monorepo signals. Then confirm which layout they want.
 
-### 4. Confirm and edit
+### 4. Done
 
-Show the user a draft of `docs/agents/domain.md`. Let them edit before writing.
-
-Write the docs files using the seed templates in this skill folder as a starting point:
-
-- [domain.md](./domain.md) — domain doc consumer rules + layout
-
-### 5. Done
-
-Tell the user the setup is complete and which engineering skills will now read from these files. Mention they can edit `docs/agents/*.md` directly later — re-running this skill is only necessary if they want to restart from scratch.
+Tell the user the setup is complete. Summarise the confirmed layout and mention that `/domain-modeling` will create `docs/CONTEXT.md` and `docs/adr/` lazily when the first term or decision is resolved. Re-running this skill is only necessary if they want to change the layout later.
