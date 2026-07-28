@@ -23,7 +23,7 @@ Every comment or issue posted to the issue tracker during triage **must** start 
 
 This skill manages labels across three scopes. All scopes are **exclusive** — only one label per scope per issue.
 
-### `triage:*` — triage workflow state (blue `#1a56db`)
+### `triage:*` — triage workflow state (verdigris `#2a9d8f`)
 
 - `triage:pending` — maintainer needs to evaluate
 - `triage:unanswered` — waiting on reporter for more information
@@ -33,14 +33,14 @@ This skill manages labels across three scopes. All scopes are **exclusive** — 
 
 Every triaged issue carries exactly one `triage:*` label.
 
-### `type:*` — nature of the work (red `#d73a4a`)
+### `type:*` — nature of the work (burnt peach `#e76f51`)
 
 - `type:bug` — something is broken
 - `type:enhancement` — new feature or improvement
 
 Every triaged issue carries exactly one `type:*` label.
 
-### `kind:*` — artifact shape (purple `#6f42c1`)
+### `kind:*` — artifact shape (charcoal blue `#264653`)
 
 - `kind:spec` — a planning document with problem, solution, and user stories
 - `kind:ticket` — a single unit of agent-sized work

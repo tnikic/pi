@@ -71,7 +71,7 @@ Each ticket is a **child issue** of the map; the tracker's issue id is its ident
 <the decision or investigation this ticket resolves>
 ```
 
-Each ticket carries `kind:decision` and a `wayfinder:<type>` label — one of `research`, `prototype`, `grilling` (see [Ticket Types](#ticket-types)).
+Each ticket carries `kind:decision` and a `wayfinder:<type>` label (sandy brown `#f4a261`) — one of `research`, `prototype`, `grilling` (see [Ticket Types](#ticket-types)).
 
 A session **claims** a ticket by assigning it to the dev driving the map, **first**, before any work, so concurrent sessions skip it. That assignee _is_ the claim: an open, unassigned ticket is unclaimed.
 

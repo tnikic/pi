@@ -39,3 +39,15 @@ Offer **multi-context** — a root `docs/CONTEXT-MAP.md` pointing to per-context
 ### 4. Done
 
 Tell the user the setup is complete. Summarise the confirmed layout and mention that `/domain-modeling` will create `docs/CONTEXT.md` and `docs/adr/` lazily when the first term or decision is resolved. Re-running this skill is only necessary if they want to change the layout later.
+
+## Label palette
+
+When creating scoped labels, use these colors:
+
+| Scope | Color | Name |
+|-------|-------|------|
+| `type` | `#e76f51` | Burnt Peach |
+| `triage` | `#2a9d8f` | Verdigris |
+| `kind` | `#264653` | Charcoal Blue |
+| `wayfinder` | `#f4a261` | Sandy Brown |
+| *spare* | `#e9c46a` | Jasmine |
