@@ -66,17 +66,13 @@ Iterate until the user approves the breakdown.
 
 ### 6. Publish the tickets
 
-Publish the approved tickets as issues, one per ticket, in dependency order (blockers first). After all tickets are created, do a second pass to set each ticket's `blocked_by` edges — the tracker needs issue identifiers before they can reference each other.
+Publish the approved tickets as **child issues** of the source spec — set `parent` to the spec's issue number when creating each. Create in dependency order (blockers first). After all tickets are created, do a second pass to set each ticket's `blocked_by` edges — the tracker needs issue identifiers before they can reference each other.
 
 Apply the labels `triage:for-agent` (scope `triage`, name `for-agent`) and `kind:ticket` (scope `kind`, name `ticket`) to each ticket. Also stamp the parent's `type:*` label (scope `type`) on every child (a spec's children inherit its type). Unless instructed otherwise, the tickets are agent-grabbable by construction.
 
 Do NOT close or modify any parent issue.
 
 <issue-template>
-
-## Parent
-
-A reference to the parent issue on the tracker (if the source was an existing issue, otherwise omit this section).
 
 ## What to build
 

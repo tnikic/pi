@@ -10,13 +10,33 @@ This skill assumes your harness can interact with a project issue tracker. If yo
 
 ## Process
 
+### Detect source type
+
+Check the source issue's `kind:*` label before synthesizing:
+
+- **`kind:map`** — this is a Wayfinder map. Activate map-consumer mode (next section).
+- **`kind:spec`** or **`kind:ticket`** — stop. "This is already a `kind:<x>`, not raw material for a spec."
+- **No label, reads like a spec** — stamp with `kind:spec`, warn "This already reads like a spec — published as-is.", and stop.
+- **No label, reads like conversation output** — proceed with normal synthesis (step 1 below).
+
+### Map-consumer mode
+
+When the source is a `kind:map`:
+
+1. **Check it's closed.** If the map has open child tickets, block with: "This map has N open decisions. Wayfinder maps should be closed before synthesizing a spec. Reply 'proceed anyway' to continue." Do not proceed without this explicit override.
+2. **Fetch the full trail.** Read the closing summary (the **Route found** comment), then fetch resolution comments from closed child tickets for detail on specific decisions.
+3. **Synthesize.** Use the closing summary's narrative for Problem Statement and Solution. Resolution comments feed Implementation Decisions. Residual fog and Out of scope feed Further Notes and Out of Scope in the spec.
+4. **Write and publish** the spec using the template below.
+
+### Normal mode
+
 1. Explore the repo to understand the current state of the codebase, if you haven't already. Use the project's domain glossary vocabulary throughout the spec, and respect any ADRs in the area you're touching.
 
-2. Sketch out the seams at which you're going to test the feature. Existing seams should be preferred to new ones. Use the highest seam possible. If new seams are needed, propose them at the highest point you can. The fewer seams across the codebase, the better - the ideal number is one.
+2. Sketch out the seams at which you're going to test the feature. Existing seams should be preferred to new ones. Use the highest seam possible. If new seams are needed, propose them at the highest point you can. The fewer seams across the codebase, the better — the ideal number is one.
 
 Check with the user that these seams match their expectations.
 
-3. Write the spec using the template below, then publish it to the project issue tracker. Apply three scoped labels — `triage:for-agent` (scope `triage`, name `for-agent`), `kind:spec` (scope `kind`, name `spec`), and `type:enhancement` (scope `type`, name `enhancement`) — no need for additional triage.
+3. Write the spec using the template below, then publish it to the project issue tracker.
 
 <spec-template>
 
@@ -73,3 +93,5 @@ A description of the things that are out of scope for this spec.
 Any further notes about the feature.
 
 </spec-template>
+
+After writing the spec via either mode, publish to the issue tracker with labels `triage:for-agent`, `kind:spec`, `type:enhancement`.

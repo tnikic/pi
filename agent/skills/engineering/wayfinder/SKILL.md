@@ -113,6 +113,8 @@ Ruling something out of scope is a scoping act, not a step on the route. When a 
 
 Two modes. Either way, **never resolve more than one ticket per session** — with the exception of research tickets.
 
+**Before either mode:** verify you are on the default branch (`main`). Wayfinder updates `docs/CONTEXT.md` and creates ADRs — project-level artifacts that belong on the default branch. If on any other branch, stop and tell the user to switch to `main`.
+
 ### Chart the map
 
 User invokes with a loose idea.
@@ -121,17 +123,36 @@ User invokes with a loose idea.
 2. **Map the frontier.** Grill again, **breadth-first** this time: fan out across the whole space rather than deep on any one thread, surfacing the open decisions and the first steps takeable now. **If this surfaces no fog** — the way to the destination is already clear, the whole journey small enough for one session — you don't need a map. Stop and ask the user how they'd like to proceed.
 3. **Create the map** (label `kind:map`): Destination and Notes filled in, Decisions-so-far empty, the fog sketched into **Not yet specified**.
 4. **Create the tickets you can specify now** as child issues of the map, each labelled `kind:decision` and the appropriate `wayfinder:<type>` — then wire blocking edges in a **second pass** (issues need ids before they can reference each other). Wiring sorts them into the frontier and the blocked; everything you can't yet specify stays in the fog — the **Not yet specified** section.
-5. **Fire the research subagents.** For each `research` ticket you just created, spin up a `subagent` with `agent: "worker"` to resolve it in parallel, capturing its findings on a throwaway `research/<name>` branch with a context pointer from the ticket.
+5. **Fire the research subagents.** For each `research` ticket you just created, spin up a `subagent` with `agent: "worker"` to resolve it in parallel, writing findings to a local `research/<name>` branch and capturing them in the resolution comment. The subagent deletes its branch after posting findings — branches stay local, never pushed.
 6. Stop — charting is one session's work; it hand-resolves nothing.
 
 ### Work through the map
 
 User invokes with a map (URL or number). A ticket is **optional** — without one, you pick the next decision, not the user.
 
-1. Load the **map** — the low-res view, not every ticket body.
+1. **Detect stub maps.** Load the map. If it has a Destination and Notes but no structured **Not yet specified** or **Out of scope** sections — just a raw dump of unresolved threads — this is a stub from a `/grill-with-docs` session. Clean up the body first: categorize every raw item into **Not yet specified** or **Out of scope**, cut the raw dump. If already structured, skip.
 2. Choose the ticket. If the user named one, use it. Otherwise take the first frontier ticket in order. **Claim it**: assign it to yourself before any work.
-3. Resolve it — **zoom as needed**: fetch the full body of any related or closed ticket on demand; invoke the skills the `## Notes` block names. If in doubt, use `/grilling` and `/domain-modeling`.
-4. Record the resolution: post the answer as a **resolution comment**, **close** the issue, and **append a context pointer** to the map's Decisions-so-far.
+3. Resolve it — **zoom as needed**: fetch the full body of any related or closed ticket on demand; invoke the skills the `## Notes` block names. If in doubt, use `/grilling` and `/domain-modeling`. **Update `docs/CONTEXT.md`** as domain terms crystallize, following the [domain-modeling skill](../domain-modeling/SKILL.md).
+4. Record the resolution: post the answer as a **resolution comment**, **close** the issue, and **append a context pointer** to the map's Decisions-so-far. If this was a **research** ticket, delete the local `research/<name>` branch — the comment is the canonical record.
 5. Add newly-surfaced tickets (create-then-wire); graduate any fog the answer has made specifiable, clearing each graduated patch from **Not yet specified** so it lives only as its new ticket. If the answer reveals a ticket — this one or another — sits beyond the destination, **rule it out of scope** rather than resolving it on the route. If the decision invalidates other parts of the map, update or delete those tickets.
+6. **Check the frontier.** Query open child tickets. If none remain, proceed to **Closing the map**. Otherwise stop — the next session picks up the next frontier ticket.
 
 The user may run unblocked tickets in parallel, so expect other sessions to be editing the tracker concurrently.
+
+### Closing the map
+
+When the frontier is empty, the route is clear. Before closing, do these in order:
+
+1. **Propose follow-up maps.** Present residual **Not yet specified** items and **Out of scope** items to the user. For each, ask whether to create a new Wayfinder map. The agent may suggest grouping related items into a single map — propose groupings and let the user approve. For items the user wants to map:
+   - Create a new `kind:map` issue with Destination and Notes filled in, and the items as raw fog.
+   - The new map's body includes a **Parent** reference linking back to this map.
+   - In this map's **Not yet specified** or **Out of scope** section, replace the text description with a link to the new map.
+   *Completion criterion: every residual-fog and out-of-scope item either has a follow-up map or is noted as deliberately left unresolved.*
+
+2. **Create ADRs.** Evaluate every closed decision ticket against the three ADR tests in [`domain-modeling/ADR-FORMAT.md`](../domain-modeling/ADR-FORMAT.md). For each that passes all three, create an ADR in `docs/adr/` following that same format. *Completion criterion: every closed decision evaluated against the three tests; an ADR created for each that qualifies.*
+
+3. **Write the closing summary.** Use the format in [`CLOSING-SUMMARY.md`](CLOSING-SUMMARY.md). Post it as a comment on the map, then append it to the map body below **Decisions so far** as **Route found**. *Completion criterion: closing summary posted as comment and appended to map body.*
+
+4. **Commit file changes.** Scan the closing summary and key decisions for domain terms. Check `docs/CONTEXT.md` for any not yet captured; update if found. Stage all changes (`docs/CONTEXT.md`, `docs/adr/`). Run `/conventional-commits` — ADRs as separate commits, glossary changes batched. *Completion criterion: all file changes committed; user approved each via conventional-commits review.*
+
+5. **Close the map.** Present the closing summary and ask: "The route is clear. Close the map?" Close on confirmation. *Completion criterion: user confirmed; map issue closed.*
