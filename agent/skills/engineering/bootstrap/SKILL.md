@@ -46,8 +46,8 @@ When creating scoped labels, use these colors:
 
 | Scope | Color | Name |
 |-------|-------|------|
-| `type` | `#e76f51` | Burnt Peach |
-| `triage` | `#2a9d8f` | Verdigris |
-| `kind` | `#264653` | Charcoal Blue |
-| `wayfinder` | `#f4a261` | Sandy Brown |
-| *spare* | `#e9c46a` | Jasmine |
+| `type` | `#f28482` | Light Coral |
+| `triage` | `#84a59d` | Muted Teal |
+| `kind` | `#f7ede2` | Linen |
+| `wayfinder` | `#f6bd60` | Honey Bronze |
+| *spare* | `#f5cac3` | Cotton Rose |
