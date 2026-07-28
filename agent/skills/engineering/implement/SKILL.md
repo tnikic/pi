@@ -38,16 +38,36 @@ Use TDD at pre-agreed seams. Run typechecking and single test files as you go. R
 
 *Completion: every spec requirement is implemented and all tests pass.*
 
-## 3. Review and fix
+## 3. Review, fix, and check acceptance criteria
 
 Run code-review against the spec. Fix clear-cut findings directly — naming, duplication, lint-like smells. For architectural judgement calls — Feature Envy, Shotgun Surgery, Divergent Change — pause and present them for approval with a recommendation.
 
-If the review comes back clean, report it briefly and move on.
+If the review comes back clean, report it briefly.
 
-*Completion: all review findings are resolved.*
+### 3a. Check acceptance criteria
 
-## 4. Commit
+Read the issue body for unchecked boxes (`- [ ]` or `* [ ]`). For each, judge whether the implementation satisfied it. Presume satisfied unless you know a criterion was skipped, blocked, or impossible.
 
-Create a single commit. The message describes the finished work. Amend an earlier commit if one was already made.
+For each satisfied criterion, replace `- [ ]` with `- [x]` and update the issue body with `update_issue`. Leave unsatisfied criteria unchecked.
 
-*Completion: one commit on the branch.*
+If any criterion is unsatisfied, report which ones and why to the user. Offer to create follow-up tickets using `create_issue`, following the same template structure as `to-tickets` (`## What to build`, `## Acceptance criteria`, `## Blocked by`). Apply the same labels as the current issue. Parent each follow-up to the current issue's parent (if it has one); otherwise create it standalone. Add a comment on the current issue linking each follow-up.
+
+If the issue body has no checkboxes at all, skip this step.
+
+*Completion: every satisfied criterion checked off in the issue body; unsatisfied criteria reported to the user with follow-up tickets offered.*
+
+## 4. Commit, push, and close
+
+Create a single commit. Instruct conventional-commits to include `Closes #N` as a footer (N is the issue number from step 1). Amend an earlier commit if one was already made.
+
+Push: `git push -u origin HEAD`. If the push fails, report the failure and stop — do not close the issue.
+
+Verify closure: poll the issue state every 3 seconds, up to 3 attempts. If the issue is now closed, stop. If still open after 3 attempts, close it manually with `update_issue(state: "closed")`.
+
+*Completion: one commit pushed, issue closed.*
+
+## 5. Parent check
+
+If the closed issue has a `parent`, list the parent's sub-issues. When all are closed, tell the user: "All sub-issues of #<parent> are closed. Close it as well?" The user confirms or declines. If confirmed and that parent itself has a parent, recurse.
+
+*Completion: parent closure offered where applicable; user decision handled.*
