@@ -8,27 +8,26 @@ Implement the work in the given issue, or pick the next unblocked one.
 
 ## 1. Pick the work
 
-If the user passed a spec or issue, use it directly and skip to step 2.
+If the user passed a spec or issue, use it directly. Read its full body. If it's empty or a vague one-liner with no clear spec, warn and ask whether to proceed anyway. If the user confirms, skip to step 2. If the user says no, fall through to the query path below.
 
 Otherwise, query open issues:
 
 1. Unassigned and unblocked — sort by priority then age.
 2. If none, assigned to @me and unblocked.
 
-Present the shortlist with a recommendation for the top candidate:
+Read the full body of each candidate. Skip any whose body is empty or a vague one-liner with no clear spec.
 
-> Three unblocked issues are open. I recommend #42 — Fix login timeout.
-> - #42 Fix login timeout (priority: high)
-> - #57 Add rate limiting (priority: medium)
-> - #63 Update docs (priority: low)
+Present the shortlist with a recommendation for the top candidate, including a one-line summary from the body:
+
+> Three unblocked issues are open. I recommend #42 — Fix login timeout: adds a lockout after 3 failed attempts.
+> - #42 Fix login timeout: adds a lockout after 3 failed attempts (priority: high)
+> - #57 Add rate limiting: token-bucket rate limiter on API routes (priority: medium)
 >
 > Work on #42?
 
 For assigned-to-you issues, preface with:
 
 > No unassigned issues. These are assigned to you — already in progress, or should I take one?
-
-Once confirmed, check the issue body. If it's empty or a vague one-liner with no clear spec, warn and ask whether to proceed anyway.
 
 *Completion: an issue with a clear spec is confirmed.*
 
