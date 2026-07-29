@@ -1,0 +1,107 @@
+# README Standards
+
+The reference for what makes a README predictable, navigable, and human. Every rule here is a lever on the root virtue: a reader who knows where to find what they need, in every repo.
+
+The **bold terms** that are about documentation structure are defined here; terms about skill construction live in [`writing-great-skills/GLOSSARY.md`](../../productivity/writing-great-skills/GLOSSARY.md).
+
+## Mandatory sections
+
+Every README has these sections, in this order:
+
+| # | Section | Purpose |
+|---|---------|---------|
+| 1 | **Introduction** | Project name, one-liner, and a short paragraph explaining what this is and what problem it solves. The reader should know within 10 seconds whether they are in the right place. |
+| 2 | **Quick Start** | Clone, install, run. No more than 5 shell commands. Assumes the reader has the language runtime installed. |
+| 3 | **How It Works** | Architecture overview. A diagram or structured description of the system's parts and how they connect. This is where diagrams and visual structure live. |
+| 4 | **Folder Structure** | An ASCII tree of the top-level directory layout. Only directories and files that matter to someone reading the code — skip node_modules, .git, lockfiles. |
+| 5 | **How to Test** | One command to run the test suite. If setup is non-trivial, a second sentence. |
+| 6 | **Badges** | Visual metadata — license, language version, CI status. See Badge Heuristics below. |
+| 7 | **Documentation Index** | Pointers to deeper docs: wiki, docs/ folder, key ADRs, API reference. If none exist yet, this section says "coming soon" for the relevant entries. |
+| 8 | **Agentic Engineering** | A short disclaimer about how this repo was built. See the template below. |
+
+### Agentic Engineering template
+
+> This repository is built with **agentic engineering**, a practice where every design decision is made by a human and AI handles the implementation under that direction. The human owns the code, understands every line, and steers the architecture. Nothing lands here without passing through human judgment first.
+
+Use it verbatim. No variation.
+
+## Badge heuristics
+
+Badges give the reader visual metadata at a glance. Add a badge when the underlying thing exists — never add a placeholder for something the repo does not have.
+
+### Detection rules
+
+| Badge | When to add | Example markdown |
+|-------|-------------|------------------|
+| **License** | A `LICENSE` file exists at the repo root | `![License](https://img.shields.io/badge/license-MIT-blue)` |
+| **Language version** | A version pin exists: `go.mod` (Go), `package.json` `engines` (Node), `Cargo.toml` (Rust), `.python-version` (Python), `Gemfile` (Ruby) | `![Go](https://img.shields.io/badge/Go-1.22-00ADD8)` |
+| **CI status** | `.github/workflows/`, `.forgejo/workflows/`, or `.gitlab-ci.yml` exists | `![CI](https://github.com/owner/repo/actions/workflows/ci.yml/badge.svg)` *(use the actual workflow URL)* |
+| **Platform** | The code has platform-specific build constraints or a setup script that checks for Unix/Windows | `![Platform](https://img.shields.io/badge/platform-linux%20%7C%20macOS-lightgrey)` |
+| **Coverage** | A coverage config or badge URL is present in the repo (Codecov, Coveralls) | Use the service's provided badge markdown |
+| **Version/release** | Git tags exist with semver versions | `![Version](https://img.shields.io/badge/version-1.0.0-blue)` *(read from latest tag)* |
+
+### Badge placement
+
+All badges go on one line at the top of the Badges section, space-separated. Maximum 6 badges. If more apply, keep the 6 most informative and drop the rest.
+
+## Diagram conventions
+
+### Directory trees
+
+Use ASCII box-drawing characters for folder structure:
+
+```
+project/
+├── src/
+│   ├── commands/
+│   └── queries/
+├── tests/
+└── docs/
+```
+
+Indent with 4 spaces per level. Use `├──` for intermediate entries and `└──` for the last entry at each level.
+
+### Architecture and flow diagrams
+
+Use **Mermaid** with the central color palette. Every diagram opens with the theme directive:
+
+````markdown
+```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#f28482', 'secondaryColor': '#84a59d', 'tertiaryColor': '#f7ede2'}}}%%
+graph TD
+    A[User] --> B[API]
+    B --> C[Database]
+```
+````
+
+Prefer `graph TD` (top-down) for architecture and `sequenceDiagram` for request flows. Keep diagrams focused — one idea per diagram. If a diagram needs more than 8 nodes, split it.
+
+### Terminal recordings (GIFs)
+
+For CLI tools, a terminal GIF in the Introduction section shows the tool in action. Use [`vhs`](https://github.com/charmbracelet/vhs) with a `.tape` file. The GIF goes in `docs/assets/`. Reference it with a relative image link.
+
+## Voice rules
+
+The README speaks in a human voice. These rules keep it there.
+
+### Use
+
+- Short sentences. One thought per sentence.
+- Standard hyphens (`-`), not em dashes (`---` or `—`)
+- Standard apostrophes (`'`), not smart quotes
+- Active voice: "the CLI generates a config file", not "a config file is generated by the CLI"
+- Concrete numbers: "responds in under 200ms", not "responds quickly"
+
+### Avoid
+
+- "Dive into", "unleash", "supercharge", "seamlessly", "robust", "cutting-edge"
+- Sentences that start with "Simply", "Just", "All you need to do is"
+- More than one emoji per section. Prefer none. Never use `✨`, `🚀`, or `💪`
+- Marketing adjectives where a fact would do: "blazing fast" is not a number
+
+### Tests for AI-written text
+
+After writing, check:
+1. Does every sentence carry information the reader needs? If it can be deleted without losing meaning, delete it.
+2. Would a human write this sentence the same way? If it sounds like documentation-as-a-service, rewrite it.
+3. Are there any words that are just padding? "It is worth noting that", "As mentioned previously", "In order to" — cut them.

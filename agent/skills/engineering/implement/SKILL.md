@@ -70,3 +70,5 @@ Verify closure: poll the issue state every 3 seconds, up to 3 attempts. If the i
 If the closed issue has a `parent`, list the parent's sub-issues. When all are closed, tell the user: "All sub-issues of #<parent> are closed. Close it as well?" The user confirms or declines. If confirmed and that parent itself has a parent, recurse.
 
 *Completion: parent closure offered where applicable; user decision handled.*
+
+When a parent `kind:spec` is closed, remind the user: "The spec is closed. Consider running `/update-docs` to bring the README up to date with everything that shipped."
