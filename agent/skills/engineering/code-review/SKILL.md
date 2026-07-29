@@ -1,14 +1,15 @@
 ---
 name: code-review
-description: Review the changes since a fixed point (commit, branch, tag, or merge-base) along two axes — Standards (does the code follow this repo's documented coding standards?) and Spec (does the code match what the originating issue/PRD asked for?). Runs both reviews in parallel sub-agents and reports them side by side. Use when the user wants to review a branch, a PR, work-in-progress changes, or asks to "review since X".
+description: Review the changes since a fixed point (commit, branch, tag, or merge-base) along three axes — Standards (does the code follow this repo's documented coding standards?), Spec (does the code match what the originating issue/PRD asked for?), and Coverage (does the change have the right kinds of tests?). Runs all three reviews in parallel sub-agents and reports them side by side. Use when the user wants to review a branch, a PR, work-in-progress changes, or asks to "review since X".
 ---
 
-Two-axis review of the diff between `HEAD` and a fixed point the user supplies:
+Three-axis review of the diff between `HEAD` and a fixed point the user supplies:
 
 - **Standards** — does the code conform to this repo's documented coding standards?
 - **Spec** — does the code faithfully implement the originating issue / PRD / spec?
+- **Coverage** — does the change include the right kinds of tests?
 
-Both axes run as **parallel sub-agents** so they don't pollute each other's context, then this skill aggregates their findings.
+All three axes run as **parallel sub-agents** so they don't pollute each other's context, then this skill aggregates their findings.
 
 This skill assumes your harness can interact with a project issue tracker. If you're unsure, run `/bootstrap` to verify.
 
@@ -20,7 +21,7 @@ Whatever the user said is the fixed point — a commit SHA, branch name, tag, `m
 
 Capture the diff command once: `git diff <fixed-point>...HEAD` (three-dot, so the comparison is against the merge-base). Also note the list of commits via `git log <fixed-point>..HEAD --oneline`.
 
-Before going further, confirm the fixed point resolves (`git rev-parse <fixed-point>`) and the diff is non-empty. A bad ref or empty diff should fail here — not inside two parallel sub-agents.
+Before going further, confirm the fixed point resolves (`git rev-parse <fixed-point>`) and the diff is non-empty. A bad ref or empty diff should fail here — not inside three parallel sub-agents.
 
 ### 2. Identify the spec source
 
@@ -55,9 +56,18 @@ Each smell reads *what it is* → *how to fix*; match it against the diff:
 - **Middle Man** — a class or function that mostly just delegates onward. → cut it, call the real target direct.
 - **Refused Bequest** — a subclass or implementer that ignores or overrides most of what it inherits. → drop the inheritance, use composition.
 
-### 4. Spawn both sub-agents in parallel
+### 4. Identify the test strategy
 
-Send a single message with two `subagent` tool calls. Use the `worker` agent for both.
+Look for the project's test portfolio, in this order:
+
+1. `docs/TESTING.md` — if it exists, read it. This is the authoritative list of expected test types for this project.
+2. If absent, note that no test strategy has been declared — the Coverage sub-agent will infer from project signals instead.
+
+Also locate the [test-type taxonomy](../tdd/test-types.md) — the Coverage sub-agent needs it to match project signals against test-type triggers.
+
+### 5. Spawn all three sub-agents in parallel
+
+Send a single message with three `subagent` tool calls. Use the `worker` agent for all three.
 
 **Standards sub-agent prompt** — include:
 
@@ -73,17 +83,27 @@ Send a single message with two `subagent` tool calls. Use the `worker` agent for
 
 If the spec is missing, skip the Spec sub-agent and note this in the final report.
 
-### 5. Aggregate
+**Coverage sub-agent prompt** — include:
 
-Present the two reports under `## Standards` and `## Spec` headings, verbatim or lightly cleaned. Do **not** merge or rerank findings — the two axes are deliberately separate (see _Why two axes_).
+- The diff command and commit list.
+- If `docs/TESTING.md` exists, paste its contents — this is the authoritative expected test portfolio.
+- If it does not exist, instruct: "Infer expected test types from project signals (Dockerfile, deploy config, CI config, `package.json` bin entries, existing test suite structure). Use the test-type taxonomy at `../tdd/test-types.md` — match project signals against each type's triggers."
+- The brief: "Report: (a) test types expected for this change that are missing or have no corresponding test in the diff; (b) tests in the diff that look like the wrong type for what they are testing (e.g., a smoke test doing deep integration work, a unit test mocking everything and testing nothing); (c) if `docs/TESTING.md` is absent and you had to infer, note this — the project has no declared test strategy. Under 400 words."
+
+The Coverage sub-agent does **not** create or write `docs/TESTING.md`. If it had to infer, it reports the gap — the TDD or improve-codebase-architecture skills own creating that file.
+
+### 6. Aggregate
+
+Present the three reports under `## Standards`, `## Spec`, and `## Coverage` headings, verbatim or lightly cleaned. Do **not** merge or rerank findings — the three axes are deliberately separate (see _Why three axes_).
 
 End with a one-line summary: total findings per axis, and the worst issue _within each axis_ (if any). Don't pick a single winner across axes — that's the reranking the separation exists to prevent.
 
-## Why two axes
+## Why three axes
 
-A change can pass one axis and fail the other:
+A change can pass one axis and fail another:
 
 - Code that follows every standard but implements the wrong thing → **Standards pass, Spec fail.**
 - Code that does exactly what the issue asked but breaks the project's conventions → **Spec pass, Standards fail.**
+- Code that is well-written and matches the spec, but a deploy-path change has no smoke test → **Standards pass, Spec pass, Coverage fail.**
 
-Reporting them separately stops one axis from masking the other.
+Reporting them separately stops one axis from masking another.
