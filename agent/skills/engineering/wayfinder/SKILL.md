@@ -8,7 +8,7 @@ A loose idea has arrived — too big for one agent session, and wrapped in fog: 
 
 The destination varies per effort, and naming it is the first act of charting — it shapes every ticket. It might be a spec to hand off and iterate on, a decision to lock before planning starts, or a change made in place like a data-structure migration. The map is domain-agnostic — engineering work, course content, whatever fits the shape.
 
-This skill assumes your harness can interact with a project issue tracker. If you're unsure, run `/bootstrap` to verify.
+
 
 ## Plan, don't do
 
@@ -71,7 +71,7 @@ Each ticket is a **child issue** of the map; the tracker's issue id is its ident
 <the decision or investigation this ticket resolves>
 ```
 
-Each ticket carries `kind:decision` and a `wayfinder:<type>` label (honey bronze `#f6bd60`) — one of `research`, `prototype`, `grilling` (see [Ticket Types](#ticket-types)).
+Each ticket carries `kind:decision` and a `wayfinder:<type>` label — color: [`accent`](../../shared/color-palette.md) — one of `research`, `prototype`, `grilling` (see [Ticket Types](#ticket-types)).
 
 A session **claims** a ticket by assigning it to the dev driving the map, **first**, before any work, so concurrent sessions skip it. That assignee _is_ the claim: an open, unassigned ticket is unclaimed.
 

@@ -67,7 +67,7 @@ Do not commit or write any files. The user runs the grilling session, designs th
 
 Write the README following every rule in [`README-STANDARDS.md`](./README-STANDARDS.md). Consult it during this step — it defines the mandatory sections, badge heuristics, diagram conventions, and voice rules.
 
-Use color tokens from the [central color palette](../../colors/color-palette.md) for any Mermaid diagrams.
+Use color tokens from the [central color palette](../../shared/color-palette.md) for any Mermaid diagrams.
 
 ### If the README already exists
 

@@ -30,7 +30,7 @@ Then use the `subagent` tool with `agent: "scout"` to walk the codebase. Don't f
 - Where are modules **shallow** — interface nearly as complex as the implementation?
 - Where have pure functions been extracted just for testability, but the real bugs hide in how they're called (no **locality**)?
 - Where do tightly-coupled modules leak across their seams?
-- Which parts of the codebase are untested, or hard to test through their current interface? Use the [test-type taxonomy](../tdd/test-types.md) to distinguish *kinds* of untested — a project with unit tests but no smoke tests has a different gap from a project with no tests at all. A missing test type is a friction point just like a shallow module.
+- Which parts of the codebase are untested, or hard to test through their current interface? Use the [test-type taxonomy](../../shared/test-types.md) to distinguish *kinds* of untested — a project with unit tests but no smoke tests has a different gap from a project with no tests at all. A missing test type is a friction point just like a shallow module.
 
 Apply the **deletion test** to anything you suspect is shallow: would deleting it concentrate complexity, or just move it? A "yes, concentrates" is the signal you want.
 
@@ -69,4 +69,4 @@ Side effects happen inline as decisions crystallize — run the `/domain-modelin
 - **Sharpening a fuzzy term during the conversation?** Update `docs/CONTEXT.md` right there.
 - **User rejects the candidate with a load-bearing reason?** Offer an ADR, framed as: _"Want me to record this as an ADR so future architecture reviews don't re-suggest it?"_ Only offer when the reason would actually be needed by a future explorer to avoid re-suggesting the same thing — skip ephemeral reasons ("not worth it right now") and self-evident ones.
 - **Want to explore alternative interfaces for the deepened module?** Run the `/codebase-design` skill and use its design-it-twice parallel sub-agent pattern.
-- **Resolving a test-gap candidate?** When the project agrees on the missing test types and a plan to add them, create or update `docs/TESTING.md` with the agreed test portfolio. Use the [test-type taxonomy](../tdd/test-types.md) for vocabulary and format.
+- **Resolving a test-gap candidate?** When the project agrees on the missing test types and a plan to add them, update `docs/TESTING.md` with the agreed test portfolio. Use the [test-type taxonomy](../../shared/test-types.md) for vocabulary and format.

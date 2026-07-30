@@ -35,13 +35,13 @@ Assign the issue to @me to claim it.
 
 ## 2. Implement
 
-Use TDD at pre-agreed seams. Run typechecking and single test files as you go. Run the full test suite once at the end.
+Use TDD at pre-agreed seams. Read `docs/TESTING.md` for the project's linter, formatter, and typechecker — run those exact commands alongside single test files as you go. Run the full test suite once at the end.
 
 *Completion: every spec requirement is implemented and all tests pass.*
 
 ## 3. Review, fix, and check acceptance criteria
 
-Run code-review against the spec. Fix clear-cut findings directly — naming, duplication, lint-like smells. For architectural judgement calls — Feature Envy, Shotgun Surgery, Divergent Change — pause and present them for approval with a recommendation.
+Run code-review against the spec. Fix clear-cut findings directly — naming, duplication, and any linter or formatter violations. For architectural judgement calls — Feature Envy, Shotgun Surgery, Divergent Change — pause and present them for approval with a recommendation.
 
 If the review comes back clean, report it briefly.
 

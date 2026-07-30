@@ -8,7 +8,6 @@ disable-model-invocation: true
 
 Break a plan, spec, or conversation into a set of **tickets** — tracer-bullet vertical slices, each declaring the tickets that **block** it.
 
-This skill assumes your harness can interact with a project issue tracker. If you're unsure, run `/bootstrap` to verify.
 
 ## Process
 

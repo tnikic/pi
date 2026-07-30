@@ -7,7 +7,7 @@ description: Test-driven development. Use when the user wants to build features 
 
 TDD is the red → green loop. This skill is the reference that makes that loop produce tests worth keeping: which test types to write, what a good test is, where tests go, the anti-patterns, and the rules of the loop. Every section applies on every cycle — consult them before and during the loop, not after.
 
-When exploring the codebase, read `docs/CONTEXT.md` (if it exists) so test names and interface vocabulary match the project's domain language, and respect ADRs in the area you're touching. Read `docs/TESTING.md` (if it exists) for the project's agreed test portfolio.
+When exploring the codebase, read `docs/CONTEXT.md` (if it exists) so test names and interface vocabulary match the project's domain language, and respect ADRs in the area you're touching. Read `docs/TESTING.md` — it is the authoritative list of test and static-analysis tools with their exact invocation commands. If it does not exist, warn the user: "`docs/TESTING.md` is missing. Run `/tooling` first to set up the project's linting, formatting, and testing tools."
 
 ## What a good test is
 
@@ -25,17 +25,7 @@ Ask: "What's the public interface, and which seams should we test?"
 
 ## Test types — which tests to write
 
-Not every project needs every kind of test. The [test-type taxonomy](test-types.md) defines each type — what it verifies, the project signals that trigger it, and what it is not for. Match the project against the taxonomy before writing tests.
-
-### Project-level research (first invocation only)
-
-On the first TDD invocation in a project, research which types from the taxonomy apply:
-
-1. Read the project's signals — `package.json`, deploy config, Dockerfile, CI config, existing test suite
-2. For each test type in the taxonomy, check whether its triggers fire against those signals
-3. Present the proposed test portfolio to the user for confirmation
-
-Persist the confirmed portfolio to `docs/TESTING.md`. If the file already exists, read it as the authoritative portfolio — do not re-research unless the user asks.
+Not every project needs every kind of test. The [test-type taxonomy](../../shared/test-types.md) defines each type — what it verifies, the project signals that trigger it, and what it is not for. Match the project against the taxonomy before writing tests. `docs/TESTING.md` is the authoritative portfolio — read it, do not re-research unless the user asks.
 
 ### Per-feature filtering (every cycle)
 

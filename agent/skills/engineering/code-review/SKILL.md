@@ -11,7 +11,7 @@ Three-axis review of the diff between `HEAD` and a fixed point the user supplies
 
 All three axes run as **parallel sub-agents** so they don't pollute each other's context, then this skill aggregates their findings.
 
-This skill assumes your harness can interact with a project issue tracker. If you're unsure, run `/bootstrap` to verify.
+
 
 ## Process
 
@@ -36,10 +36,13 @@ Look for the originating spec, in this order:
 
 Anything in the repo that documents how code should be written, such as `CODING_STANDARDS.md` or `CONTRIBUTING.md`.
 
+Also locate the project's linter and formatter — read `docs/TESTING.md` for the exact tools and their invocation commands. The Standards sub-agent will run these on the changed files.
+
 On top of whatever the repo documents, the Standards axis always carries the **smell baseline** below — a fixed set of Fowler code smells (_Refactoring_, ch.3) that applies even when a repo documents nothing. Two rules bind it:
 
 - **The repo overrides.** A documented repo standard always wins; where it endorses something the baseline would flag, suppress the smell.
-- **Always a judgement call.** Each smell is a labelled heuristic ("possible Feature Envy"), never a hard violation — and, like any standard here, skip anything tooling already enforces.
+- **Always a judgement call.** Each smell is a labelled heuristic ("possible Feature Envy"), never a hard violation.
+- **Run the linter and formatter.** Execute the exact commands from `docs/TESTING.md` on the changed files. Report violations. Tooling-caught issues are noted but not re-litigated as smells.
 
 Each smell reads *what it is* → *how to fix*; match it against the diff:
 
@@ -63,7 +66,7 @@ Look for the project's test portfolio, in this order:
 1. `docs/TESTING.md` — if it exists, read it. This is the authoritative list of expected test types for this project.
 2. If absent, note that no test strategy has been declared — the Coverage sub-agent will infer from project signals instead.
 
-Also locate the [test-type taxonomy](../tdd/test-types.md) — the Coverage sub-agent needs it to match project signals against test-type triggers.
+Also locate the [test-type taxonomy](../../shared/test-types.md) — the Coverage sub-agent needs it to match project signals against test-type triggers.
 
 ### 5. Spawn all three sub-agents in parallel
 
@@ -73,7 +76,7 @@ Send a single message with three `subagent` tool calls. Use the `worker` agent f
 
 - The full diff command and commit list.
 - The list of standards-source files you found in step 3, **plus the smell baseline from step 3** pasted in full — the sub-agent has no other access to it.
-- The brief: "Report — per file/hunk where relevant — (a) every place the diff violates a documented standard: cite the standard (file + the rule); and (b) any baseline smell you spot: name it and quote the hunk. Distinguish hard violations from judgement calls — documented-standard breaches can be hard, but baseline smells are always judgement calls, and a documented repo standard overrides the baseline. Skip anything tooling enforces. Under 400 words."
+- The brief: "Report — per file/hunk where relevant — (a) every place the diff violates a documented standard: cite the standard (file + the rule); (b) any baseline smell you spot: name it and quote the hunk; and (c) the output of running the project's linter and formatter on the changed files (the exact commands are provided above). Distinguish hard violations from judgement calls — documented-standard breaches can be hard, but baseline smells are always judgement calls, and a documented repo standard overrides the baseline. Under 400 words."
 
 **Spec sub-agent prompt** — include:
 
@@ -87,10 +90,10 @@ If the spec is missing, skip the Spec sub-agent and note this in the final repor
 
 - The diff command and commit list.
 - If `docs/TESTING.md` exists, paste its contents — this is the authoritative expected test portfolio.
-- If it does not exist, instruct: "Infer expected test types from project signals (Dockerfile, deploy config, CI config, `package.json` bin entries, existing test suite structure). Use the test-type taxonomy at `../tdd/test-types.md` — match project signals against each type's triggers."
+- If it does not exist, instruct: "Infer expected test types from project signals (Dockerfile, deploy config, CI config, `package.json` bin entries, existing test suite structure). Use the test-type taxonomy at `../../shared/test-types.md` — match project signals against each type's triggers."
 - The brief: "Report: (a) test types expected for this change that are missing or have no corresponding test in the diff; (b) tests in the diff that look like the wrong type for what they are testing (e.g., a smoke test doing deep integration work, a unit test mocking everything and testing nothing); (c) if `docs/TESTING.md` is absent and you had to infer, note this — the project has no declared test strategy. Under 400 words."
 
-The Coverage sub-agent does **not** create or write `docs/TESTING.md`. If it had to infer, it reports the gap — the TDD or improve-codebase-architecture skills own creating that file.
+The Coverage sub-agent does **not** create or write `docs/TESTING.md`. If it had to infer, it reports the gap — the `tooling` skill owns creating that file; `improve-codebase-architecture` updates it.
 
 ### 6. Aggregate
 

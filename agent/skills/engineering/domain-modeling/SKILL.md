@@ -41,6 +41,8 @@ If a `docs/CONTEXT-MAP.md` exists, the repo has multiple contexts. The map point
 
 Create files lazily — only when you have something to write. If no `docs/CONTEXT.md` exists, create one when the first term is resolved. If no `docs/adr/` exists, create it when the first ADR is needed.
 
+**First run in a repo:** if neither `docs/CONTEXT.md` nor `docs/CONTEXT-MAP.md` exists, check for monorepo signals — a `pnpm-workspace.yaml`, a `workspaces` field in `package.json`, or a populated `packages/*` with its own `src/`. Default to single-context (one `docs/CONTEXT.md` + `docs/adr/`). Offer multi-context only when monorepo signals are present.
+
 When you're exploring the codebase for another skill (not actively domain-modeling) and these files don't exist yet, **proceed silently**. Don't flag their absence or suggest creating them upfront — that's domain-modeling's job when the time is right.
 
 ## During the session

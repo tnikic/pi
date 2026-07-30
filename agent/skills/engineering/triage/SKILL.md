@@ -16,7 +16,9 @@ Move issues on the project issue tracker through a small state machine of triage
 
 This skill manages labels across three scopes. All scopes are **exclusive** — only one label per scope per issue.
 
-### `triage:*` — triage workflow state (muted teal `#84a59d`)
+### `triage:*` — triage workflow state
+
+Color: [`secondary`](../../shared/color-palette.md).
 
 - `triage:pending` — maintainer needs to evaluate
 - `triage:unanswered` — waiting on reporter for more information
@@ -26,14 +28,18 @@ This skill manages labels across three scopes. All scopes are **exclusive** — 
 
 Every triaged issue carries exactly one `triage:*` label.
 
-### `type:*` — nature of the work (light coral `#f28482`)
+### `type:*` — nature of the work
+
+Color: [`primary`](../../shared/color-palette.md).
 
 - `type:bug` — something is broken
 - `type:enhancement` — new feature or improvement
 
 Every triaged issue carries exactly one `type:*` label.
 
-### `kind:*` — artifact shape (linen `#f7ede2`)
+### `kind:*` — artifact shape
+
+Color: [`surface`](../../shared/color-palette.md).
 
 - `kind:spec` — a planning document with problem, solution, and user stories
 - `kind:ticket` — a single unit of agent-sized work
@@ -45,8 +51,6 @@ The triage agent determines `kind:spec` vs `kind:ticket` during evaluation: `kin
 Scoped labels use the notation `scope:name`. When calling tracker tools, always pass them as structured labels — `{scope: "scope", name: "name"}` — not as a flat string with a colon.
 
 ---
-
-This skill assumes your harness can interact with a project issue tracker. If you're unsure, run `/bootstrap` to verify.
 
 State transitions: an unlabeled issue normally goes to `triage:pending` first; from there it moves to `triage:unanswered`, `triage:for-agent`, `triage:for-human`, or `triage:wontfix`. `triage:unanswered` returns to `triage:pending` once the reporter replies. The maintainer can override at any time — flag transitions that look unusual and ask before proceeding.
 

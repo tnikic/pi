@@ -1,6 +1,6 @@
 # Color Palette
 
-Central color tokens for skills that produce visual output — Mermaid diagrams, badges, HTML reports, labels.
+Central color tokens for skills that produce visual output — Mermaid diagrams, badges, HTML reports, issue labels.
 
 | Token | Hex | Usage |
 |-------|-----|-------|
@@ -10,6 +10,18 @@ Central color tokens for skills that produce visual output — Mermaid diagrams,
 | `surface` | `#f7ede2` | Backgrounds, fills, diagram regions |
 | `muted` | `#f5cac3` | Borders, dividers, subtle separators |
 
+## Label scope mapping
+
+When creating scoped issue labels, use these token-to-scope assignments:
+
+| Scope | Token |
+|-------|-------|
+| `type` | `primary` |
+| `triage` | `secondary` |
+| `kind` | `surface` |
+| `wayfinder` | `accent` |
+| *spare* | `muted` |
+
 ## Usage in Mermaid
 
 ```mermaid
@@ -17,7 +29,3 @@ Central color tokens for skills that produce visual output — Mermaid diagrams,
 ```
 
 Reference tokens by hex value. Mermaid `init` directives go at the top of every diagram that uses color.
-
-## Usage in labels
-
-When creating issue labels via the issue-tracker extension, use these hex values directly. See `/bootstrap` for the label-scope-to-color mapping.

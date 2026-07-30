@@ -63,16 +63,7 @@ Indent with 4 spaces per level. Use `├──` for intermediate entries and `�
 
 ### Architecture and flow diagrams
 
-Use **Mermaid** with the central color palette. Every diagram opens with the theme directive:
-
-````markdown
-```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#f28482', 'secondaryColor': '#84a59d', 'tertiaryColor': '#f7ede2'}}}%%
-graph TD
-    A[User] --> B[API]
-    B --> C[Database]
-```
-````
+Use **Mermaid** with the [central color palette](../../shared/color-palette.md). Every diagram opens with the theme directive shown there.
 
 Prefer `graph TD` (top-down) for architecture and `sequenceDiagram` for request flows. Keep diagrams focused — one idea per diagram. If a diagram needs more than 8 nodes, split it.
 
