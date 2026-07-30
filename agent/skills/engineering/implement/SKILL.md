@@ -29,7 +29,9 @@ For assigned-to-you issues, preface with:
 
 > No unassigned issues. These are assigned to you — already in progress, or should I take one?
 
-*Completion: an issue with a clear spec is confirmed.*
+Assign the issue to @me to claim it.
+
+*Completion: an issue with a clear spec is confirmed and assigned.*
 
 ## 2. Implement
 
@@ -45,13 +47,13 @@ If the review comes back clean, report it briefly.
 
 ### 3a. Check acceptance criteria
 
-Read the issue body for unchecked boxes (`- [ ]` or `* [ ]`). For each, judge whether the implementation satisfied it. Presume satisfied unless you know a criterion was skipped, blocked, or impossible.
+Read the issue body and all comments for unchecked boxes (`- [ ]` or `* [ ]`). For each, judge whether the implementation satisfied it. Presume satisfied unless you know a criterion was skipped, blocked, or impossible.
 
-For each satisfied criterion, replace `- [ ]` with `- [x]` and update the issue body with `update_issue`. Leave unsatisfied criteria unchecked.
+For each satisfied criterion, replace `- [ ]` with `- [x]` and update the issue body with `update_issue`. For checkboxes found in comments, post a comment listing which criteria were satisfied. Leave unsatisfied criteria unchecked.
 
 If any criterion is unsatisfied, report which ones and why to the user. Offer to create follow-up tickets using `create_issue`, following the same template structure as `to-tickets` (`## What to build`, `## Acceptance criteria`, `## Blocked by`). Apply the same labels as the current issue. Parent each follow-up to the current issue's parent (if it has one); otherwise create it standalone. Add a comment on the current issue linking each follow-up.
 
-If the issue body has no checkboxes at all, skip this step.
+If neither the issue body nor comments contain any checkboxes, skip this step.
 
 *Completion: every satisfied criterion checked off in the issue body; unsatisfied criteria reported to the user with follow-up tickets offered.*
 
