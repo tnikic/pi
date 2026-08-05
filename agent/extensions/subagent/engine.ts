@@ -5,7 +5,7 @@
  * can be tested independently of process spawning.
  */
 
-import { spawn, type ChildProcess } from "node:child_process";
+import { type ChildProcess, spawn } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -39,6 +39,7 @@ export interface SingleResult {
 	completed: boolean;
 	reportDoneStatus?: string;
 	reportDoneSummary?: string;
+	reportDoneFindings?: string[];
 }
 
 export interface CapsConfig {
@@ -95,6 +96,7 @@ export interface EventState {
 	completed: boolean;
 	reportDoneStatus?: string;
 	reportDoneSummary?: string;
+	reportDoneFindings?: string[];
 }
 
 export function initialEventState(): EventState {
@@ -177,6 +179,7 @@ export function processEvent(state: EventState, event: PiEvent): EventState {
 								| undefined;
 							next.reportDoneStatus = args?.status as string | undefined;
 							next.reportDoneSummary = args?.summary as string | undefined;
+							next.reportDoneFindings = args?.findings as string[] | undefined;
 						}
 					}
 				}
@@ -463,6 +466,7 @@ export async function runSubagent(config: EngineConfig): Promise<SingleResult> {
 		result.completed = state.completed;
 		result.reportDoneStatus = state.reportDoneStatus;
 		result.reportDoneSummary = state.reportDoneSummary;
+		result.reportDoneFindings = state.reportDoneFindings;
 
 		if (wasAborted) {
 			result.stopReason = "aborted";

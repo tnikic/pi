@@ -25,25 +25,25 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { Container, Markdown, Spacer, Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
-import { type AgentScope, discoverAgents } from "./agents.ts";
 import type { AgentConfig } from "./agent-config.ts";
-import { runSubagent, DEFAULT_CAPS } from "./engine.ts";
+import { type AgentScope, discoverAgents } from "./agents.ts";
+import { DEFAULT_CAPS, runSubagent } from "./engine.ts";
+import {
+	type FormattableResult,
+	formatChainToon,
+	formatParallelToon,
+	formatSingleToon,
+	formatTokens,
+	isFailedResult,
+} from "./toon-formatter.ts";
 
 const MAX_PARALLEL_TASKS = 8;
 const MAX_CONCURRENCY = 4;
 const COLLAPSED_ITEM_COUNT = 10;
-const PER_TASK_OUTPUT_CAP = 50 * 1024;
 
 function formatAvailableAgents(agents: AgentConfig[]): string {
 	if (agents.length === 0) return "none";
 	return agents.map((a) => `${a.name} (${a.source})`).join(", ");
-}
-
-function formatTokens(count: number): string {
-	if (count < 1000) return count.toString();
-	if (count < 10000) return `${(count / 1000).toFixed(1)}k`;
-	if (count < 1000000) return `${Math.round(count / 1000)}k`;
-	return `${(count / 1000000).toFixed(1)}M`;
 }
 
 function formatUsageStats(
@@ -175,6 +175,9 @@ interface SingleResult {
 	errorMessage?: string;
 	step?: number;
 	completed: boolean;
+	reportDoneStatus?: string;
+	reportDoneSummary?: string;
+	reportDoneFindings?: string[];
 }
 
 interface SubagentDetails {
@@ -194,41 +197,6 @@ function getFinalOutput(messages: Message[]): string {
 		}
 	}
 	return "";
-}
-
-function isFailedResult(result: SingleResult): boolean {
-	return (
-		result.exitCode !== 0 ||
-		result.stopReason === "error" ||
-		result.stopReason === "aborted" ||
-		result.stopReason === "timeout" ||
-		result.stopReason === "tool_timeout" ||
-		result.stopReason === "turn_limit" ||
-		result.stopReason === "incomplete"
-	);
-}
-
-function getResultOutput(result: SingleResult): string {
-	if (isFailedResult(result)) {
-		return (
-			result.errorMessage ||
-			result.stderr ||
-			getFinalOutput(result.messages) ||
-			"(no output)"
-		);
-	}
-	return getFinalOutput(result.messages) || "(no output)";
-}
-
-function truncateParallelOutput(output: string): string {
-	const byteLength = Buffer.byteLength(output, "utf8");
-	if (byteLength <= PER_TASK_OUTPUT_CAP) return output;
-
-	let truncated = output.slice(0, PER_TASK_OUTPUT_CAP);
-	while (Buffer.byteLength(truncated, "utf8") > PER_TASK_OUTPUT_CAP) {
-		truncated = truncated.slice(0, -1);
-	}
-	return `${truncated}\n\n[Output truncated: ${byteLength - Buffer.byteLength(truncated, "utf8")} bytes omitted. Full output preserved in tool details.]`;
 }
 
 type DisplayItem =
@@ -377,6 +345,9 @@ async function runSingleAgent(
 		errorMessage: engineResult.errorMessage,
 		step,
 		completed: engineResult.completed,
+		reportDoneStatus: engineResult.reportDoneStatus,
+		reportDoneSummary: engineResult.reportDoneSummary,
+		reportDoneFindings: engineResult.reportDoneFindings,
 	};
 }
 
@@ -553,12 +524,11 @@ export default function (pi: ExtensionAPI) {
 
 					const isError = isFailedResult(result);
 					if (isError) {
-						const errorMsg = getResultOutput(result);
 						return {
 							content: [
 								{
 									type: "text",
-									text: `Chain stopped at step ${i + 1} (${step.agent}): ${errorMsg}`,
+									text: formatChainToon(results as FormattableResult[]),
 								},
 							],
 							details: makeDetails("chain")(results),
@@ -571,9 +541,7 @@ export default function (pi: ExtensionAPI) {
 					content: [
 						{
 							type: "text",
-							text:
-								getFinalOutput(results[results.length - 1].messages) ||
-								"(no output)",
+							text: formatChainToon(results as FormattableResult[]),
 						},
 					],
 					details: makeDetails("chain")(results),
@@ -659,19 +627,11 @@ export default function (pi: ExtensionAPI) {
 					},
 				);
 
-				const successCount = results.filter((r) => !isFailedResult(r)).length;
-				const summaries = results.map((r) => {
-					const output = truncateParallelOutput(getResultOutput(r));
-					const status = isFailedResult(r)
-						? `failed${r.stopReason && r.stopReason !== "end" ? ` (${r.stopReason})` : ""}`
-						: "completed";
-					return `### [${r.agent}] ${status}\n\n${output}`;
-				});
 				return {
 					content: [
 						{
 							type: "text",
-							text: `Parallel: ${successCount}/${results.length} succeeded\n\n${summaries.join("\n\n---\n\n")}`,
+							text: formatParallelToon(results as FormattableResult[]),
 						},
 					],
 					details: makeDetails("parallel")(results),
@@ -691,27 +651,15 @@ export default function (pi: ExtensionAPI) {
 					makeDetails("single"),
 				);
 				const isError = isFailedResult(result);
-				if (isError) {
-					const errorMsg = getResultOutput(result);
-					return {
-						content: [
-							{
-								type: "text",
-								text: `Agent ${result.stopReason || "failed"}: ${errorMsg}`,
-							},
-						],
-						details: makeDetails("single")([result]),
-						isError: true,
-					};
-				}
 				return {
 					content: [
 						{
 							type: "text",
-							text: getFinalOutput(result.messages) || "(no output)",
+							text: formatSingleToon(result as FormattableResult),
 						},
 					],
 					details: makeDetails("single")([result]),
+					...(isError ? { isError: true } : {}),
 				};
 			}
 
