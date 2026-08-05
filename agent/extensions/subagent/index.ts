@@ -40,7 +40,7 @@ import {
 
 const MAX_PARALLEL_TASKS = 8;
 const MAX_CONCURRENCY = 4;
-const COLLAPSED_ITEM_COUNT = 10;
+const COLLAPSED_ITEM_COUNT = 3;
 
 function formatAvailableAgents(agents: AgentConfig[]): string {
 	if (agents.length === 0) return "none";
@@ -720,21 +720,31 @@ export default function (pi: ExtensionAPI) {
 
 			const mdTheme = getMarkdownTheme();
 
-			const renderDisplayItems = (items: DisplayItem[], limit?: number) => {
+			const renderDisplayItems = (
+				items: DisplayItem[],
+				limit?: number,
+				isRunning = false,
+			) => {
 				const toShow = limit ? items.slice(-limit) : items;
 				const skipped =
 					limit && items.length > limit ? items.length - limit : 0;
 				let text = "";
 				if (skipped > 0)
 					text += theme.fg("muted", `... ${skipped} earlier items\n`);
-				for (const item of toShow) {
+				for (let i = 0; i < toShow.length; i++) {
+					const item = toShow[i];
+					const isLast = i === toShow.length - 1;
 					if (item.type === "text") {
 						const preview = expanded
 							? item.text
 							: item.text.split("\n").slice(0, 3).join("\n");
 						text += `${theme.fg("toolOutput", preview)}\n`;
 					} else {
-						text += `${theme.fg("muted", "→ ") + formatToolCall(item.name, item.args, theme.fg.bind(theme))}\n`;
+						const arrow =
+							isRunning && isLast
+								? theme.fg("warning", "→ ")
+								: theme.fg("muted", "→ ");
+						text += `${arrow + formatToolCall(item.name, item.args, theme.fg.bind(theme))}\n`;
 					}
 				}
 				return text.trimEnd();
@@ -809,7 +819,8 @@ export default function (pi: ExtensionAPI) {
 				else if (displayItems.length === 0)
 					text += `\n${theme.fg("muted", "(no output)")}`;
 				else {
-					text += `\n${renderDisplayItems(displayItems, COLLAPSED_ITEM_COUNT)}`;
+					const isRunning = r.exitCode === -1;
+					text += `\n${renderDisplayItems(displayItems, COLLAPSED_ITEM_COUNT, isRunning)}`;
 					if (displayItems.length > COLLAPSED_ITEM_COUNT)
 						text += `\n${theme.fg("muted", "(Ctrl+O to expand)")}`;
 				}
@@ -943,7 +954,10 @@ export default function (pi: ExtensionAPI) {
 					text += `\n\n${theme.fg("muted", `─── Step ${r.step}: `)}${theme.fg("accent", r.agent)} ${rIcon}`;
 					if (displayItems.length === 0)
 						text += `\n${theme.fg("muted", "(no output)")}`;
-					else text += `\n${renderDisplayItems(displayItems, 5)}`;
+					else {
+						const isRunning = r.exitCode === -1;
+						text += `\n${renderDisplayItems(displayItems, 3, isRunning)}`;
+					}
 				}
 				const usageStr = formatUsageStats(aggregateUsage(details.results));
 				if (usageStr) text += `\n\n${theme.fg("dim", `Total: ${usageStr}`)}`;
@@ -1056,7 +1070,10 @@ export default function (pi: ExtensionAPI) {
 					text += `\n\n${theme.fg("muted", "─── ")}${theme.fg("accent", r.agent)} ${rIcon}`;
 					if (displayItems.length === 0)
 						text += `\n${theme.fg("muted", r.exitCode === -1 ? "(running...)" : "(no output)")}`;
-					else text += `\n${renderDisplayItems(displayItems, 5)}`;
+					else {
+						const isRunningAgent = r.exitCode === -1;
+						text += `\n${renderDisplayItems(displayItems, 3, isRunningAgent)}`;
+					}
 				}
 				if (!isRunning) {
 					const usageStr = formatUsageStats(aggregateUsage(details.results));
