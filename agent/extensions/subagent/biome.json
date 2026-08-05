@@ -1,11 +1,5 @@
 {
 	"$schema": "https://biomejs.dev/schemas/2.5.5/schema.json",
-	"vcs": {
-		"enabled": true,
-		"clientKind": "git",
-		"useIgnoreFile": true,
-		"defaultBranch": "main"
-	},
 	"formatter": {
 		"enabled": true
 	},
@@ -17,7 +11,7 @@
 	},
 	"overrides": [
 		{
-			"includes": ["agent/extensions/**/*.test.ts"],
+			"includes": ["*.test.ts"],
 			"linter": {
 				"rules": {
 					"suspicious": {

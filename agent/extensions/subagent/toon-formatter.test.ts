@@ -6,9 +6,9 @@
 
 import assert from "node:assert";
 import { describe, it } from "node:test";
+import type { SubagentResult, SubagentUsage } from "./result-types.ts";
 import {
 	displayStatus,
-	type FormattableResult,
 	formatChainToon,
 	formatErrorToon,
 	formatParallelToon,
@@ -22,8 +22,9 @@ import {
 // ── Helpers ───────────────────────────────────────────────────
 
 function makeResult(
-	overrides: Partial<FormattableResult> = {},
-): FormattableResult {
+	overrides: Partial<SubagentResult> & { usage?: Partial<SubagentUsage> } = {},
+): SubagentResult {
+	const { usage: usageOverride, ...rest } = overrides;
 	return {
 		agent: "scout",
 		agentSource: "user",
@@ -31,12 +32,21 @@ function makeResult(
 		exitCode: 0,
 		messages: [],
 		stderr: "",
-		usage: { input: 1000, output: 500, turns: 7 },
+		usage: {
+			input: 1000,
+			output: 500,
+			cacheRead: 0,
+			cacheWrite: 0,
+			cost: 0,
+			contextTokens: 0,
+			turns: 7,
+			...usageOverride,
+		},
 		completed: true,
 		reportDoneStatus: "success",
 		reportDoneSummary: "Found auth-related files",
 		reportDoneFindings: ["login.ts", "auth.ts", "session.ts"],
-		...overrides,
+		...rest,
 	};
 }
 

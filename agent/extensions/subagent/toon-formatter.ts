@@ -5,34 +5,17 @@
  * Extracted from index.ts so formatting can be tested independently.
  */
 
+import * as os from "node:os";
+import type { AgentConfig } from "./agent-config.ts";
+import type { SubagentResult, SubagentUsage } from "./result-types.ts";
+
 // ── Types ─────────────────────────────────────────────────────
 
-export interface FormattableUsage {
-	input: number;
-	output: number;
-	cacheRead?: number;
-	cacheWrite?: number;
-	cost?: number;
-	turns: number;
-}
+export type { SubagentResult, SubagentUsage };
 
-export interface FormattableResult {
-	agent: string;
-	agentSource: string;
-	task: string;
-	exitCode: number;
-	messages: unknown[];
-	stderr: string;
-	usage: FormattableUsage;
-	model?: string;
-	stopReason?: string;
-	errorMessage?: string;
-	step?: number;
-	completed: boolean;
-	reportDoneStatus?: string;
-	reportDoneSummary?: string;
-	reportDoneFindings?: string[];
-}
+export type DisplayItem =
+	| { type: "text"; text: string }
+	| { type: "toolCall"; name: string; args: Record<string, unknown> };
 
 // ── Token formatting ──────────────────────────────────────────
 
@@ -56,7 +39,7 @@ export function formatTokens(count: number): string {
  * Maps report_done status to a display string.
  * Falls back to stopReason or exitCode analysis.
  */
-export function displayStatus(result: FormattableResult): string {
+export function displayStatus(result: SubagentResult): string {
 	if (result.reportDoneStatus) return result.reportDoneStatus;
 	if (result.stopReason === "timeout") return "timeout";
 	if (result.stopReason === "tool_timeout") return "tool_timeout";
@@ -68,7 +51,7 @@ export function displayStatus(result: FormattableResult): string {
 	return "incomplete";
 }
 
-export function isFailedResult(result: FormattableResult): boolean {
+export function isFailedResult(result: SubagentResult): boolean {
 	return (
 		result.exitCode !== 0 ||
 		result.stopReason === "error" ||
@@ -100,7 +83,7 @@ export function toonQuote(value: string): string {
  * Formats a single subagent result as a TOON object.
  * Success path produces key-value pairs; error path uses error:/help: lines.
  */
-export function formatSingleToon(result: FormattableResult): string {
+export function formatSingleToon(result: SubagentResult): string {
 	if (isFailedResult(result)) {
 		return formatErrorToon(result);
 	}
@@ -132,7 +115,7 @@ export function formatSingleToon(result: FormattableResult): string {
  * Formats a failed subagent result as TOON error:/help: lines.
  * Each error type has a distinct message and actionable help.
  */
-export function formatErrorToon(result: FormattableResult): string {
+export function formatErrorToon(result: SubagentResult): string {
 	const tokens = result.usage.input + result.usage.output;
 	const tokenStr = formatTokens(tokens);
 	const lines: string[] = [];
@@ -203,7 +186,7 @@ export function formatErrorToon(result: FormattableResult): string {
 /**
  * Extracts partial output from a failed result for inclusion in error output.
  */
-function getPartialOutput(result: FormattableResult): string | null {
+function getPartialOutput(result: SubagentResult): string | null {
 	if (result.reportDoneSummary) return result.reportDoneSummary;
 
 	// Try to get the last text from messages
@@ -241,7 +224,7 @@ function getPartialOutput(result: FormattableResult): string | null {
 /**
  * Formats parallel execution results as TOON keyed tabular.
  */
-export function formatParallelToon(results: FormattableResult[]): string {
+export function formatParallelToon(results: SubagentResult[]): string {
 	const header = `subagents[${results.length}]{agent,status,turns,tokens}:`;
 	const rows = results.map((r) => {
 		const tokens = r.usage.input + r.usage.output;
@@ -266,7 +249,7 @@ export function formatParallelToon(results: FormattableResult[]): string {
 /**
  * Formats chain execution results as TOON keyed tabular.
  */
-export function formatChainToon(results: FormattableResult[]): string {
+export function formatChainToon(results: SubagentResult[]): string {
 	const header = `chain[${results.length}]{step,agent,status,turns,tokens}:`;
 	const rows = results.map((r) => {
 		const stepLabel = r.step ?? results.indexOf(r) + 1;
@@ -319,7 +302,7 @@ export interface UsageAggregate {
  * Aggregates usage stats across multiple results.
  */
 export function formatUsageAggregate(
-	results: FormattableResult[],
+	results: SubagentResult[],
 ): UsageAggregate {
 	const total: UsageAggregate = {
 		input: 0,
@@ -334,10 +317,163 @@ export function formatUsageAggregate(
 		total.input += r.usage.input;
 		total.output += r.usage.output;
 		total.tokens += r.usage.input + r.usage.output;
-		total.cacheRead += r.usage.cacheRead || 0;
-		total.cacheWrite += r.usage.cacheWrite || 0;
-		total.cost += r.usage.cost || 0;
+		total.cacheRead += r.usage.cacheRead;
+		total.cacheWrite += r.usage.cacheWrite;
+		total.cost += r.usage.cost;
 		total.turns += r.usage.turns;
 	}
 	return total;
+}
+
+// ── Display helpers (moved from index.ts) ─────────────────────
+
+/** Formats a comma-separated list of available agents for error messages. */
+export function formatAvailableAgents(agents: AgentConfig[]): string {
+	if (agents.length === 0) return "none";
+	return agents.map((a) => `${a.name} (${a.source})`).join(", ");
+}
+
+/**
+ * Formats aggregate usage stats into a compact single-line summary.
+ * Includes turns, tokens in/out, cache r/w, cost, context tokens, and model.
+ */
+export function formatUsageStats(
+	usage: SubagentUsage,
+	model?: string,
+): string {
+	const parts: string[] = [];
+	if (usage.turns)
+		parts.push(`${usage.turns} turn${usage.turns > 1 ? "s" : ""}`);
+	if (usage.input) parts.push(`↑${formatTokens(usage.input)}`);
+	if (usage.output) parts.push(`↓${formatTokens(usage.output)}`);
+	if (usage.cacheRead) parts.push(`R${formatTokens(usage.cacheRead)}`);
+	if (usage.cacheWrite) parts.push(`W${formatTokens(usage.cacheWrite)}`);
+	if (usage.cost) parts.push(`$${usage.cost.toFixed(4)}`);
+	if (usage.contextTokens && usage.contextTokens > 0) {
+		parts.push(`ctx:${formatTokens(usage.contextTokens)}`);
+	}
+	if (model) parts.push(model);
+	return parts.join(" ");
+}
+
+/**
+ * Formats a single tool call for display in subagent output.
+ * Each tool gets a custom short representation.
+ */
+export function formatToolCall(
+	toolName: string,
+	args: Record<string, unknown>,
+	themeFg: (color: string, text: string) => string,
+): string {
+	const shortenPath = (p: string) => {
+		const home = os.homedir();
+		return p.startsWith(home) ? `~${p.slice(home.length)}` : p;
+	};
+
+	switch (toolName) {
+		case "bash": {
+			const command = (args.command as string) || "...";
+			const preview =
+				command.length > 60 ? `${command.slice(0, 60)}...` : command;
+			return themeFg("muted", "$ ") + themeFg("toolOutput", preview);
+		}
+		case "read": {
+			const rawPath = (args.file_path || args.path || "...") as string;
+			const filePath = shortenPath(rawPath);
+			const offset = args.offset as number | undefined;
+			const limit = args.limit as number | undefined;
+			let text = themeFg("accent", filePath);
+			if (offset !== undefined || limit !== undefined) {
+				const startLine = offset ?? 1;
+				const endLine = limit !== undefined ? startLine + limit - 1 : "";
+				text += themeFg(
+					"warning",
+					`:${startLine}${endLine ? `-${endLine}` : ""}`,
+				);
+			}
+			return themeFg("muted", "read ") + text;
+		}
+		case "write": {
+			const rawPath = (args.file_path || args.path || "...") as string;
+			const filePath = shortenPath(rawPath);
+			const content = (args.content || "") as string;
+			const lines = content.split("\n").length;
+			let text = themeFg("muted", "write ") + themeFg("accent", filePath);
+			if (lines > 1) text += themeFg("dim", ` (${lines} lines)`);
+			return text;
+		}
+		case "edit": {
+			const rawPath = (args.file_path || args.path || "...") as string;
+			return (
+				themeFg("muted", "edit ") + themeFg("accent", shortenPath(rawPath))
+			);
+		}
+		case "ls": {
+			const rawPath = (args.path || ".") as string;
+			return themeFg("muted", "ls ") + themeFg("accent", shortenPath(rawPath));
+		}
+		case "find": {
+			const pattern = (args.pattern || "*") as string;
+			const rawPath = (args.path || ".") as string;
+			return (
+				themeFg("muted", "find ") +
+				themeFg("accent", pattern) +
+				themeFg("dim", ` in ${shortenPath(rawPath)}`)
+			);
+		}
+		case "grep": {
+			const pattern = (args.pattern || "") as string;
+			const rawPath = (args.path || ".") as string;
+			return (
+				themeFg("muted", "grep ") +
+				themeFg("accent", `/${pattern}/`) +
+				themeFg("dim", ` in ${shortenPath(rawPath)}`)
+			);
+		}
+		default: {
+			const argsStr = JSON.stringify(args);
+			const preview =
+				argsStr.length > 50 ? `${argsStr.slice(0, 50)}...` : argsStr;
+			return themeFg("accent", toolName) + themeFg("dim", ` ${preview}`);
+		}
+	}
+}
+
+/** Returns the final text output from the last assistant message. */
+export function getFinalOutput(messages: Record<string, unknown>[]): string {
+	for (let i = messages.length - 1; i >= 0; i--) {
+		const msg = messages[i];
+		if (msg.role === "assistant") {
+			const content = msg.content as Array<Record<string, unknown>>;
+			if (!content) continue;
+			for (const part of content) {
+				if (part.type === "text") return part.text as string;
+			}
+		}
+	}
+	return "";
+}
+
+/** Extracts display items (text blocks and tool calls) from messages. */
+export function getDisplayItems(
+	messages: Record<string, unknown>[],
+): DisplayItem[] {
+	const items: DisplayItem[] = [];
+	for (const msg of messages) {
+		if (msg.role === "assistant") {
+			const content = msg.content as Array<Record<string, unknown>>;
+			if (!content) continue;
+			for (const part of content) {
+				if (part.type === "text")
+					items.push({ type: "text", text: part.text as string });
+				else if (part.type === "toolCall")
+					items.push({
+						type: "toolCall",
+						name: part.name as string,
+						args: part.arguments as Record<string, unknown>,
+					});
+			}
+		}
+	}
+	return items;
 }

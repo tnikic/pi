@@ -10,37 +10,12 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import type { AgentConfig } from "./agent-config.ts";
+import type { SubagentResult, SubagentUsage } from "./result-types.ts";
 
 // ── Types ─────────────────────────────────────────────────────
 
-export interface UsageStats {
-	input: number;
-	output: number;
-	cacheRead: number;
-	cacheWrite: number;
-	cost: number;
-	contextTokens: number;
-	turns: number;
-}
-
-export interface SingleResult {
-	agent: string;
-	agentSource: "user" | "project" | "unknown";
-	task: string;
-	exitCode: number;
-	messages: Record<string, unknown>[];
-	stderr: string;
-	usage: UsageStats;
-	model?: string;
-	stopReason?: string;
-	errorMessage?: string;
-	step?: number;
-	/** True when report_done tool call was detected. */
-	completed: boolean;
-	reportDoneStatus?: string;
-	reportDoneSummary?: string;
-	reportDoneFindings?: string[];
-}
+// Re-export for backward compatibility and convenience.
+export type { SubagentResult, SubagentUsage };
 
 export interface CapsConfig {
 	toolTimeout: number;
@@ -88,8 +63,8 @@ interface PiEvent {
 // ── Event processing (pure, testable) ─────────────────────────
 
 export interface EventState {
-	messages: Message[];
-	usage: UsageStats;
+	messages: Record<string, unknown>[];
+	usage: SubagentUsage;
 	model?: string;
 	stopReason?: string;
 	errorMessage?: string;
@@ -262,7 +237,7 @@ function killWithGrace(proc: ChildProcess, graceMs = 5000): void {
  * Spawns the subagent pi process, streams JSON events, enforces caps,
  * and returns a SingleResult.
  */
-export async function runSubagent(config: EngineConfig): Promise<SingleResult> {
+export async function runSubagent(config: EngineConfig): Promise<SubagentResult> {
 	const { agent, task, cwd, caps, signal } = config;
 
 	const args: string[] = ["--mode", "json", "-p", "--no-session"];
@@ -276,7 +251,7 @@ export async function runSubagent(config: EngineConfig): Promise<SingleResult> {
 	let state = initialEventState();
 	let stderr = "";
 
-	const result: SingleResult = {
+	const result: SubagentResult = {
 		agent: agent.name,
 		agentSource: agent.source,
 		task,

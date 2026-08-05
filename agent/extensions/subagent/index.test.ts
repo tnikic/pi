@@ -6,6 +6,8 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
 import { mapWithConcurrencyLimit } from "./concurrency.ts";
+import { validateModes } from "./orchestrator.ts";
+import { isFailedResult } from "./toon-formatter.ts";
 
 // ── mapWithConcurrencyLimit ───────────────────────────────────
 
@@ -149,17 +151,6 @@ describe("chain {previous} placeholder", () => {
 // ── Mode validation logic ─────────────────────────────────────
 
 describe("mode validation", () => {
-	function validateModes(
-		hasChain: boolean,
-		hasTasks: boolean,
-		hasSingle: boolean,
-	): string | null {
-		const modeCount = Number(hasChain) + Number(hasTasks) + Number(hasSingle);
-		return modeCount !== 1
-			? "Invalid parameters. Provide exactly one mode."
-			: null;
-	}
-
 	it("accepts single mode only", () => {
 		assert.strictEqual(validateModes(false, false, true), null);
 	});
@@ -225,7 +216,7 @@ describe("max parallel tasks", () => {
 
 describe("chain orchestration", () => {
 	it("stops on first failure", () => {
-		// Recreate the chain stopping logic from index.ts
+		// Uses real isFailedResult from toon-formatter.ts
 		const results: Array<{
 			agent: string;
 			exitCode: number;
@@ -254,17 +245,7 @@ describe("chain orchestration", () => {
 			};
 			results.push(result);
 
-			const isError =
-				result.exitCode !== 0 ||
-				result.stopReason === "error" ||
-				result.stopReason === "aborted" ||
-				result.stopReason === "timeout" ||
-				result.stopReason === "tool_timeout" ||
-				result.stopReason === "turn_limit" ||
-				result.stopReason === "incomplete" ||
-				!result.completed;
-
-			if (isError) {
+			if (isFailedResult(result)) {
 				stopped = true;
 				stopIndex = i;
 				break;
@@ -294,9 +275,7 @@ describe("chain orchestration", () => {
 				completed: true,
 			};
 
-			const isError = result.exitCode !== 0 || !result.completed;
-
-			if (isError) {
+			if (isFailedResult(result)) {
 				stopped = true;
 				break;
 			}
@@ -369,23 +348,6 @@ describe("unknown agent", () => {
 // ── Aggregate result counting ─────────────────────────────────
 
 describe("aggregate result counting", () => {
-	function isFailed(r: {
-		exitCode: number;
-		stopReason?: string;
-		completed: boolean;
-	}) {
-		return (
-			r.exitCode !== 0 ||
-			r.stopReason === "error" ||
-			r.stopReason === "aborted" ||
-			r.stopReason === "timeout" ||
-			r.stopReason === "tool_timeout" ||
-			r.stopReason === "turn_limit" ||
-			r.stopReason === "incomplete" ||
-			!r.completed
-		);
-	}
-
 	it("counts success and failure correctly", () => {
 		const results = [
 			{ agent: "a", exitCode: 0, stopReason: "completed", completed: true },
@@ -398,8 +360,8 @@ describe("aggregate result counting", () => {
 			{ agent: "c", exitCode: 0, stopReason: "completed", completed: true },
 		];
 
-		const successCount = results.filter((r) => !isFailed(r)).length;
-		const failCount = results.filter(isFailed).length;
+		const successCount = results.filter((r) => !isFailedResult(r)).length;
+		const failCount = results.filter(isFailedResult).length;
 
 		assert.strictEqual(successCount, 2);
 		assert.strictEqual(failCount, 1);
@@ -411,7 +373,7 @@ describe("aggregate result counting", () => {
 			{ agent: "b", exitCode: 0, stopReason: "completed", completed: true },
 		];
 
-		const failCount = results.filter(isFailed).length;
+		const failCount = results.filter(isFailedResult).length;
 		assert.strictEqual(failCount, 0);
 	});
 
@@ -427,7 +389,7 @@ describe("aggregate result counting", () => {
 			},
 		];
 
-		const failCount = results.filter(isFailed).length;
+		const failCount = results.filter(isFailedResult).length;
 		assert.strictEqual(failCount, 3);
 	});
 });
