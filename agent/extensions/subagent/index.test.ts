@@ -12,7 +12,11 @@ import { mapWithConcurrencyLimit } from "./concurrency.ts";
 describe("mapWithConcurrencyLimit", () => {
 	it("maps all items preserving order", async () => {
 		const items = [1, 2, 3, 4, 5];
-		const results = await mapWithConcurrencyLimit(items, 2, async (n) => n * 10);
+		const results = await mapWithConcurrencyLimit(
+			items,
+			2,
+			async (n) => n * 10,
+		);
 		assert.deepStrictEqual(results, [10, 20, 30, 40, 50]);
 	});
 
@@ -68,15 +72,12 @@ describe("mapWithConcurrencyLimit", () => {
 	});
 
 	it("propagates errors from individual tasks", async () => {
-		await assert.rejects(
-			async () => {
-				await mapWithConcurrencyLimit([1, 2, 3], 2, async (n) => {
-					if (n === 2) throw new Error("task failed");
-					return n;
-				});
-			},
-			/^Error: task failed$/,
-		);
+		await assert.rejects(async () => {
+			await mapWithConcurrencyLimit([1, 2, 3], 2, async (n) => {
+				if (n === 2) throw new Error("task failed");
+				return n;
+			});
+		}, /^Error: task failed$/);
 	});
 
 	it("clamps concurrency to 1 when limit is 0 or negative", async () => {
@@ -293,9 +294,7 @@ describe("chain orchestration", () => {
 				completed: true,
 			};
 
-			const isError =
-				result.exitCode !== 0 ||
-				!result.completed;
+			const isError = result.exitCode !== 0 || !result.completed;
 
 			if (isError) {
 				stopped = true;
