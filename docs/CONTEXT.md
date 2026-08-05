@@ -31,3 +31,21 @@ _Avoid_: pipeline, sequence, waterfall
 **Parallel**:
 Concurrent execution mode where multiple subagents run simultaneously with a controlled concurrency limit (max 4 concurrent, 8 total).
 _Avoid_: batch, fan-out, concurrent
+
+## Agent Types
+
+**Researcher**:
+An agent type for fact-finding and investigation. Researches tools, APIs, documentation, and third-party resources against primary sources. Reports findings without judgment — discovers, does not evaluate.
+_Avoid_: worker, investigator, finder
+
+**Auditor**:
+An agent type for analysis and judgment. Audits code against standards, specs, or taxonomies. Runs tools (linters, formatters), detects violations and smells, produces structured findings. Distinguishes hard violations from judgment calls.
+_Avoid_: reviewer, checker, inspector
+
+**Architect**:
+An agent type for structural analysis and design. Walks codebases for architectural friction, detects shallow modules, applies the deep-module vocabulary (module, interface, seam, adapter, depth, leverage, locality). Designs deepened interfaces with trade-off analysis.
+_Avoid_: scout, designer, explorer
+
+**Agent definition**:
+A markdown file in `~/.pi/agent/agents/` (user) or `.pi/agents/` (project) with YAML frontmatter (`name`, `description`, optional `tools`, `model`, `timeout`, `maxTurns`, `toolTimeout`) and a system prompt body. Discovered by the subagent extension at invocation time.
+_Avoid_: agent config, agent spec, agent file
