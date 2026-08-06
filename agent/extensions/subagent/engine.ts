@@ -29,6 +29,24 @@ export const DEFAULT_CAPS: CapsConfig = {
 	maxTurns: 20,
 };
 
+/**
+ * Instructions injected into every subprocess task.
+ * The subagent MUST call the report_done tool as its final action.
+ */
+export const COMPLETION_INSTRUCTION = [
+	"",
+	"---",
+	"## Completion contract",
+	"",
+	"When you have finished the task above, you MUST call the `report_done` tool as your final action.",
+	"Do not end with a plain text message — your result will be treated as incomplete.",
+	"",
+	"The `report_done` tool accepts:",
+	'- status: "success" (task completed fully), "partial" (some parts done), or "failed" (could not complete)',
+	"- summary: a concise description of what was accomplished",
+	"- findings (optional): list of specific findings, files changed, or discoveries",
+].join("\n");
+
 export interface EngineConfig {
 	agent: AgentConfig;
 	task: string;
@@ -280,21 +298,7 @@ export async function runSubagent(config: EngineConfig): Promise<SubagentResult>
 			args.push("--append-system-prompt", tmpPromptPath);
 		}
 
-		const completionInstruction = [
-			"",
-			"---",
-			"## Completion contract",
-			"",
-			"When you have finished the task above, you MUST call the `report_done` tool as your final action.",
-			"Do not end with a plain text message — your result will be treated as incomplete.",
-			"",
-			"The `report_done` tool accepts:",
-			'- status: "success" (task completed fully), "partial" (some parts done), or "failed" (could not complete)',
-			"- summary: a concise description of what was accomplished",
-			"- findings (optional): list of specific findings, files changed, or discoveries",
-		].join("\n");
-
-		args.push(`Task: ${task}${completionInstruction}`);
+		args.push(`Task: ${task}${COMPLETION_INSTRUCTION}`);
 
 		let wasAborted = false;
 		let timedOut = false;

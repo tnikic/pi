@@ -8,6 +8,8 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
 import {
+	COMPLETION_INSTRUCTION,
+	DEFAULT_CAPS,
 	hasReportDone,
 	initialEventState,
 	processEvent,
@@ -566,5 +568,54 @@ describe("initialEventState", () => {
 		assert.strictEqual(state.errorMessage, undefined);
 		assert.strictEqual(state.reportDoneStatus, undefined);
 		assert.strictEqual(state.reportDoneSummary, undefined);
+	});
+});
+
+// ── DEFAULT_CAPS ─────────────────────────────────────────────
+
+describe("DEFAULT_CAPS", () => {
+	it("has toolTimeout of 120 seconds", () => {
+		assert.strictEqual(DEFAULT_CAPS.toolTimeout, 120_000);
+	});
+
+	it("has globalTimeout of 5 minutes", () => {
+		assert.strictEqual(DEFAULT_CAPS.globalTimeout, 300_000);
+	});
+
+	it("has maxTurns of 20", () => {
+		assert.strictEqual(DEFAULT_CAPS.maxTurns, 20);
+	});
+});
+
+// ── COMPLETION_INSTRUCTION ────────────────────────────────────
+
+describe("COMPLETION_INSTRUCTION", () => {
+	it("tells subagent to call report_done", () => {
+		assert.ok(
+			COMPLETION_INSTRUCTION.includes("call the `report_done` tool"),
+			"should instruct to call report_done",
+		);
+	});
+
+	it("warns against plain text ending", () => {
+		assert.ok(
+			COMPLETION_INSTRUCTION.includes("Do not end with a plain text message"),
+			"should warn against plain text ending",
+		);
+	});
+
+	it("documents all three report_done parameters", () => {
+		assert.ok(
+			COMPLETION_INSTRUCTION.includes("status"),
+			"should mention status",
+		);
+		assert.ok(
+			COMPLETION_INSTRUCTION.includes("summary"),
+			"should mention summary",
+		);
+		assert.ok(
+			COMPLETION_INSTRUCTION.includes("findings"),
+			"should mention findings",
+		);
 	});
 });

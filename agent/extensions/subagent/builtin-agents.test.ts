@@ -140,6 +140,10 @@ describe("built-in agent definitions", () => {
 			assert.ok(agent!.body.includes("# Constraints"));
 			assert.ok(agent!.body.includes("# Research Standards"));
 		});
+		it("has Completion section with report_done instruction", () => {
+			assert.ok(agent!.body.includes("# Completion"));
+			assert.ok(agent!.body.includes("report_done"));
+		});
 	});
 
 	describe("auditor", () => {
@@ -177,6 +181,10 @@ describe("built-in agent definitions", () => {
 			assert.ok(agent!.body.includes("# Constraints"));
 			assert.ok(agent!.body.includes("# Common Reference"));
 		});
+		it("has Completion section with report_done instruction", () => {
+			assert.ok(agent!.body.includes("# Completion"));
+			assert.ok(agent!.body.includes("report_done"));
+		});
 	});
 
 	describe("architect", () => {
@@ -207,6 +215,10 @@ describe("built-in agent definitions", () => {
 			assert.ok(agent!.body.includes("# Vocabulary"));
 			assert.ok(agent!.body.includes("# Instructions"));
 			assert.ok(agent!.body.includes("# Constraints"));
+		});
+		it("has Completion section with report_done instruction", () => {
+			assert.ok(agent!.body.includes("# Completion"));
+			assert.ok(agent!.body.includes("report_done"));
 		});
 	});
 });
