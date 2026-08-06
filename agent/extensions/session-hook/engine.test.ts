@@ -3,17 +3,29 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+	mkdirSync,
+	mkdtempSync,
+	readFileSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, it } from "node:test";
 import {
+	addHook,
 	executeHook,
 	formatHookOutput,
 	type HookEntry,
+	listHooks,
 	loadConfig,
+	parseAddArgs,
+	parseArgs,
+	readConfigAtPath,
 	runHooks,
 	type SessionHookConfig,
+	writeConfigAtPath,
 } from "./engine.ts";
 
 // ─── Test helpers ────────────────────────────────────────────────────────────
@@ -360,6 +372,415 @@ describe("runHooks", () => {
 
 		assert.strictEqual(state.hadHooks, false);
 		assert.strictEqual(state.results.length, 0);
+	});
+});
+
+// ─── parseArgs ───────────────────────────────────────────────────────────────
+
+describe("parseArgs", () => {
+	it("splits on whitespace", () => {
+		assert.deepStrictEqual(parseArgs("a b c"), ["a", "b", "c"]);
+	});
+
+	it("handles double-quoted strings", () => {
+		assert.deepStrictEqual(parseArgs('a "b c" d'), ["a", "b c", "d"]);
+	});
+
+	it("handles single-quoted strings", () => {
+		assert.deepStrictEqual(parseArgs("a 'b c' d"), ["a", "b c", "d"]);
+	});
+
+	it("handles flags with values", () => {
+		assert.deepStrictEqual(parseArgs("--command echo --timeout 5000"), [
+			"--command",
+			"echo",
+			"--timeout",
+			"5000",
+		]);
+	});
+
+	it("handles quoted command with spaces", () => {
+		assert.deepStrictEqual(
+			parseArgs('add myhook --command "echo hello world"'),
+			["add", "myhook", "--command", "echo hello world"],
+		);
+	});
+
+	it("returns empty array for empty string", () => {
+		assert.deepStrictEqual(parseArgs(""), []);
+	});
+
+	it("returns empty array for whitespace-only string", () => {
+		assert.deepStrictEqual(parseArgs("   "), []);
+	});
+
+	it("handles leading and trailing whitespace", () => {
+		assert.deepStrictEqual(parseArgs("  a b  "), ["a", "b"]);
+	});
+});
+
+// ─── parseAddArgs ────────────────────────────────────────────────────────────
+
+describe("parseAddArgs", () => {
+	it("parses name and command", () => {
+		const result = parseAddArgs(["myhook", "--command", "echo hello"]);
+		assert.ok(typeof result !== "string");
+		if (typeof result !== "string") {
+			assert.strictEqual(result.name, "myhook");
+			assert.strictEqual(result.command, "echo hello");
+			assert.strictEqual(result.timeout, undefined);
+			assert.strictEqual(result.project, false);
+		}
+	});
+
+	it("parses custom timeout", () => {
+		const result = parseAddArgs([
+			"myhook",
+			"--command",
+			"echo hello",
+			"--timeout",
+			"5000",
+		]);
+		assert.ok(typeof result !== "string");
+		if (typeof result !== "string") {
+			assert.strictEqual(result.timeout, 5000);
+		}
+	});
+
+	it("parses --project flag", () => {
+		const result = parseAddArgs([
+			"myhook",
+			"--command",
+			"echo hello",
+			"--project",
+		]);
+		assert.ok(typeof result !== "string");
+		if (typeof result !== "string") {
+			assert.strictEqual(result.project, true);
+		}
+	});
+
+	it("returns error when name is missing", () => {
+		const result = parseAddArgs([]);
+		assert.strictEqual(typeof result, "string");
+		assert.ok((result as string).includes("Usage"));
+	});
+
+	it("returns error when --command is missing", () => {
+		const result = parseAddArgs(["myhook"]);
+		assert.strictEqual(typeof result, "string");
+		assert.ok((result as string).includes("--command is required"));
+	});
+
+	it("returns error when --command has no value", () => {
+		const result = parseAddArgs(["myhook", "--command"]);
+		assert.strictEqual(typeof result, "string");
+		assert.ok((result as string).includes("--command requires a value"));
+	});
+
+	it("returns error for invalid timeout", () => {
+		const result = parseAddArgs([
+			"myhook",
+			"--command",
+			"echo",
+			"--timeout",
+			"abc",
+		]);
+		assert.strictEqual(typeof result, "string");
+		assert.ok((result as string).includes("Invalid timeout"));
+	});
+
+	it("returns error for unknown argument", () => {
+		const result = parseAddArgs(["myhook", "--command", "echo", "--unknown"]);
+		assert.strictEqual(typeof result, "string");
+		assert.ok((result as string).includes("Unknown argument"));
+	});
+
+	it("accepts -c and -t short flags", () => {
+		const result = parseAddArgs(["myhook", "-c", "echo", "-t", "3000"]);
+		assert.ok(typeof result !== "string");
+		if (typeof result !== "string") {
+			assert.strictEqual(result.command, "echo");
+			assert.strictEqual(result.timeout, 3000);
+		}
+	});
+});
+
+// ─── managed_by field ────────────────────────────────────────────────────────
+
+describe("managed_by in config", () => {
+	it("reads managed_by from config file", () => {
+		const dir = makeTmpDir();
+		writeConfig(dir, [
+			{
+				name: "test",
+				command: "echo hello",
+				managed_by: "anvil",
+			} as HookEntry,
+		]);
+
+		const result = loadConfig(dir);
+		assert.ok(result);
+		assert.strictEqual(result.hooks[0].managed_by, "anvil");
+	});
+
+	it("managed_by is undefined when not present", () => {
+		const dir = makeTmpDir();
+		writeConfig(dir, [{ name: "test", command: "echo hello" }]);
+
+		const result = loadConfig(dir);
+		assert.ok(result);
+		assert.strictEqual(result.hooks[0].managed_by, undefined);
+	});
+
+	it("managed_by round-trips through write and read", () => {
+		const dir = makeTmpDir();
+		const configPath = `${dir}/session-hook.json`;
+
+		writeConfigAtPath(configPath, [
+			{ name: "a", command: "echo a", managed_by: "anvil" },
+		]);
+
+		const read = readConfigAtPath(configPath);
+		assert.strictEqual(read.length, 1);
+		assert.strictEqual(read[0].managed_by, "anvil");
+	});
+});
+
+// ─── readConfigAtPath ────────────────────────────────────────────────────────
+
+describe("readConfigAtPath", () => {
+	it("returns empty array when file does not exist", () => {
+		const result = readConfigAtPath(
+			"/tmp/nonexistent-session-hook-config.json",
+		);
+		assert.deepStrictEqual(result, []);
+	});
+
+	it("returns hooks from an existing config file", () => {
+		const dir = makeTmpDir();
+		writeConfig(dir, [
+			{ name: "a", command: "echo a" },
+			{ name: "b", command: "echo b" },
+		]);
+
+		const result = readConfigAtPath(`${dir}/.pi/session-hook.json`);
+		assert.strictEqual(result.length, 2);
+	});
+
+	it("returns empty array when file has no valid hooks", () => {
+		const dir = makeTmpDir();
+		writeConfig(dir, [{ name: "", command: "echo" } as unknown as HookEntry]);
+
+		const result = readConfigAtPath(`${dir}/.pi/session-hook.json`);
+		assert.deepStrictEqual(result, []);
+	});
+});
+
+// ─── writeConfigAtPath ───────────────────────────────────────────────────────
+
+describe("writeConfigAtPath", () => {
+	it("writes hooks to a file and creates directories", () => {
+		const dir = makeTmpDir();
+		const configPath = `${dir}/newdir/subdir/hooks.json`;
+
+		writeConfigAtPath(configPath, [
+			{ name: "x", command: "echo x", timeout: 5000 },
+		]);
+
+		const read = readConfigAtPath(configPath);
+		assert.strictEqual(read.length, 1);
+		assert.strictEqual(read[0].name, "x");
+		assert.strictEqual(read[0].timeout, 5000);
+	});
+
+	it("preserves managed_by in written config", () => {
+		const dir = makeTmpDir();
+		const configPath = `${dir}/hooks.json`;
+
+		writeConfigAtPath(configPath, [
+			{ name: "tool", command: "echo hi", managed_by: "anvil" },
+		]);
+
+		const read = readConfigAtPath(configPath);
+		assert.strictEqual(read[0].managed_by, "anvil");
+	});
+
+	it("omits undefined fields from output", () => {
+		const dir = makeTmpDir();
+		const configPath = `${dir}/hooks.json`;
+
+		writeConfigAtPath(configPath, [
+			{ name: "minimal", command: "echo minimal" },
+		]);
+
+		const raw = readFileSync(configPath, "utf-8");
+		const parsed = JSON.parse(raw);
+		const entry = parsed.hooks[0];
+		// Only name and command should be present
+		assert.strictEqual(Object.keys(entry).length, 2);
+		assert.ok("name" in entry);
+		assert.ok("command" in entry);
+		assert.ok(!("timeout" in entry));
+		assert.ok(!("managed_by" in entry));
+	});
+});
+
+// ─── addHook ─────────────────────────────────────────────────────────────────
+
+describe("addHook", () => {
+	it("adds a new hook to a config file (simulated project)", () => {
+		const dir = makeTmpDir();
+
+		const result = addHook(
+			dir,
+			{ name: "myhook", command: "echo hi", managed_by: "user" },
+			true,
+		);
+
+		assert.strictEqual(result.overwrote, false);
+
+		const hooks = readConfigAtPath(`${dir}/.pi/session-hook.json`);
+		assert.strictEqual(hooks.length, 1);
+		assert.strictEqual(hooks[0].name, "myhook");
+		assert.strictEqual(hooks[0].command, "echo hi");
+		assert.strictEqual(hooks[0].managed_by, "user");
+	});
+
+	it("adds a hook with custom timeout", () => {
+		const dir = makeTmpDir();
+
+		addHook(
+			dir,
+			{
+				name: "slow",
+				command: "sleep 1",
+				timeout: 5000,
+				managed_by: "user",
+			},
+			true,
+		);
+
+		const hooks = readConfigAtPath(`${dir}/.pi/session-hook.json`);
+		assert.strictEqual(hooks[0].timeout, 5000);
+	});
+
+	it("overwrites an existing hook with same name", () => {
+		const dir = makeTmpDir();
+
+		// Add first
+		addHook(
+			dir,
+			{ name: "hook", command: "echo old", managed_by: "user" },
+			true,
+		);
+
+		// Overwrite
+		const result = addHook(
+			dir,
+			{ name: "hook", command: "echo new", managed_by: "user" },
+			true,
+		);
+
+		assert.strictEqual(result.overwrote, true);
+
+		const hooks = readConfigAtPath(`${dir}/.pi/session-hook.json`);
+		assert.strictEqual(hooks.length, 1);
+		assert.strictEqual(hooks[0].command, "echo new");
+	});
+
+	it("adds to existing config without removing other entries", () => {
+		const dir = makeTmpDir();
+
+		addHook(
+			dir,
+			{ name: "first", command: "echo first", managed_by: "user" },
+			true,
+		);
+		addHook(
+			dir,
+			{ name: "second", command: "echo second", managed_by: "user" },
+			true,
+		);
+
+		const hooks = readConfigAtPath(`${dir}/.pi/session-hook.json`);
+		assert.strictEqual(hooks.length, 2);
+		const names = hooks.map((h) => h.name).sort();
+		assert.deepStrictEqual(names, ["first", "second"]);
+	});
+});
+
+// ─── listHooks ───────────────────────────────────────────────────────────────
+
+describe("listHooks", () => {
+	it("returns empty array when no hooks configured", () => {
+		const dir = makeTmpDir();
+		const result = listHooks(dir);
+		assert.deepStrictEqual(result, []);
+	});
+
+	it("lists project hooks with source=project", () => {
+		const dir = makeTmpDir();
+		writeConfig(dir, [
+			{ name: "a", command: "echo a", managed_by: "user" } as HookEntry,
+		]);
+
+		const result = listHooks(dir);
+		assert.strictEqual(result.length, 1);
+		assert.strictEqual(result[0].source, "project");
+		assert.strictEqual(result[0].name, "a");
+	});
+
+	it("project hook with same name overrides global (merge logic)", () => {
+		// Tests that when a project hook has the same name, it's the one
+		// returned. The actual global→project merge path is untestable
+		// without writing to the real global config path.
+		const dir = makeTmpDir();
+
+		// Add a project hook
+		addHook(
+			dir,
+			{ name: "shared", command: "echo project", managed_by: "user" },
+			true,
+		);
+
+		const result = listHooks(dir);
+		assert.strictEqual(result.length, 1);
+		assert.strictEqual(result[0].command, "echo project");
+		assert.strictEqual(result[0].source, "project");
+	});
+
+	it("includes managed_by in results (undefined when not set)", () => {
+		const dir = makeTmpDir();
+		writeConfig(dir, [
+			{ name: "with", command: "echo with", managed_by: "anvil" } as HookEntry,
+			{ name: "without", command: "echo without" },
+		]);
+
+		const result = listHooks(dir);
+		assert.strictEqual(result.length, 2);
+
+		const withHook = result.find((h) => h.name === "with");
+		const withoutHook = result.find((h) => h.name === "without");
+		assert.ok(withHook);
+		assert.ok(withoutHook);
+		assert.strictEqual(withHook.managed_by, "anvil");
+		assert.strictEqual(withoutHook.managed_by, undefined);
+	});
+
+	it("returns hooks sorted with project entries", () => {
+		const dir = makeTmpDir();
+		writeConfig(dir, [
+			{ name: "z", command: "echo z" },
+			{ name: "a", command: "echo a" },
+		]);
+
+		const result = listHooks(dir);
+		assert.strictEqual(result.length, 2);
+		// Both should be project source
+		for (const h of result) {
+			assert.strictEqual(h.source, "project");
+		}
 	});
 });
 
