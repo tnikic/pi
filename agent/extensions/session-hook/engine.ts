@@ -21,6 +21,10 @@ export interface HookEntryWithSource extends HookEntry {
 	source: "global" | "project";
 }
 
+export interface HookRemoveResult {
+	found: boolean;
+}
+
 export interface SessionHookConfig {
 	hooks: HookEntry[];
 }
@@ -348,6 +352,64 @@ export function parseAddArgs(
 	return { name, command, timeout, project };
 }
 
+// ─── Remove operation ───────────────────────────────────────────────────────
+
+/**
+ * Remove a hook by name from the global or project config.
+ * Returns whether a matching entry was found and removed.
+ */
+export function removeHook(
+	cwd: string,
+	name: string,
+	project: boolean,
+): HookRemoveResult {
+	const targetPath = project ? projectConfigPath(cwd) : GLOBAL_CONFIG_PATH;
+	const existing = readConfigAtPath(targetPath);
+
+	const idx = existing.findIndex((h) => h.name === name);
+	if (idx === -1) {
+		return { found: false };
+	}
+
+	existing.splice(idx, 1);
+	writeConfigAtPath(targetPath, existing);
+	return { found: true };
+}
+
+// ─── Find operation ──────────────────────────────────────────────────────────
+
+/**
+ * Find a hook by name in the merged config (project overrides global).
+ * Returns the hook with its source, or undefined if not found.
+ */
+export function findHook(
+	cwd: string,
+	name: string,
+): HookEntryWithSource | undefined {
+	const hooks = listHooks(cwd);
+	return hooks.find((h) => h.name === name);
+}
+
+// ─── Edit operation ──────────────────────────────────────────────────────────
+
+/**
+ * Read a config file for editing. Returns the path and current content,
+ * or undefined if the file does not exist.
+ */
+export function editHookConfig(
+	cwd: string,
+	project: boolean,
+): { path: string; content: string } | undefined {
+	const targetPath = project ? projectConfigPath(cwd) : GLOBAL_CONFIG_PATH;
+
+	try {
+		const content = readFileSync(targetPath, "utf-8");
+		return { path: targetPath, content };
+	} catch {
+		return undefined;
+	}
+}
+
 // ─── Add / List operations ───────────────────────────────────────────────────
 
 /**
@@ -402,6 +464,68 @@ export function listHooks(cwd: string): HookEntryWithSource[] {
 	}
 
 	return result;
+}
+
+// ─── Remove argument parsing ────────────────────────────────────────────────
+
+/**
+ * Parse remove subcommand: remove <name> [--project]
+ */
+export function parseRemoveArgs(
+	args: string[],
+): { name: string; project: boolean } | string {
+	if (args.length < 1) {
+		return "Usage: /session-hook remove <name> [--project]";
+	}
+
+	const name = args[0];
+	let project = false;
+
+	for (let i = 1; i < args.length; i++) {
+		if (args[i] === "--project") {
+			project = true;
+		} else {
+			return `Unknown argument: ${args[i]}`;
+		}
+	}
+
+	return { name, project };
+}
+
+// ─── Test argument parsing ───────────────────────────────────────────────────
+
+/**
+ * Parse test subcommand: test <name>
+ */
+export function parseTestArgs(args: string[]): { name: string } | string {
+	if (args.length < 1) {
+		return "Usage: /session-hook test <name>";
+	}
+
+	if (args.length > 1) {
+		return `Unknown argument: ${args[1]}`;
+	}
+
+	return { name: args[0] };
+}
+
+// ─── Edit argument parsing ───────────────────────────────────────────────────
+
+/**
+ * Parse edit subcommand: edit [--project]
+ */
+export function parseEditArgs(args: string[]): { project: boolean } | string {
+	let project = false;
+
+	for (const arg of args) {
+		if (arg === "--project") {
+			project = true;
+		} else {
+			return `Unknown argument: ${arg}`;
+		}
+	}
+
+	return { project };
 }
 
 // ─── Output formatting ───────────────────────────────────────────────────────

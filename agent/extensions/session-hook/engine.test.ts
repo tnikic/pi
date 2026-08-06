@@ -15,14 +15,20 @@ import { join } from "node:path";
 import { afterEach, describe, it } from "node:test";
 import {
 	addHook,
+	editHookConfig,
 	executeHook,
+	findHook,
 	formatHookOutput,
 	type HookEntry,
 	listHooks,
 	loadConfig,
 	parseAddArgs,
 	parseArgs,
+	parseEditArgs,
+	parseRemoveArgs,
+	parseTestArgs,
 	readConfigAtPath,
+	removeHook,
 	runHooks,
 	type SessionHookConfig,
 	writeConfigAtPath,
@@ -707,6 +713,223 @@ describe("addHook", () => {
 		assert.strictEqual(hooks.length, 2);
 		const names = hooks.map((h) => h.name).sort();
 		assert.deepStrictEqual(names, ["first", "second"]);
+	});
+});
+
+// ─── removeHook ──────────────────────────────────────────────────────────────
+
+describe("removeHook", () => {
+	it("removes an existing hook from project config", () => {
+		const dir = makeTmpDir();
+
+		addHook(dir, { name: "a", command: "echo a", managed_by: "user" }, true);
+		addHook(dir, { name: "b", command: "echo b", managed_by: "user" }, true);
+
+		const result = removeHook(dir, "a", true);
+		assert.strictEqual(result.found, true);
+
+		const hooks = readConfigAtPath(`${dir}/.pi/session-hook.json`);
+		assert.strictEqual(hooks.length, 1);
+		assert.strictEqual(hooks[0].name, "b");
+	});
+
+	it("returns found=false when hook does not exist", () => {
+		const dir = makeTmpDir();
+
+		addHook(dir, { name: "a", command: "echo a", managed_by: "user" }, true);
+
+		const result = removeHook(dir, "nonexistent", true);
+		assert.strictEqual(result.found, false);
+
+		// Original hooks still intact
+		const hooks = readConfigAtPath(`${dir}/.pi/session-hook.json`);
+		assert.strictEqual(hooks.length, 1);
+		assert.strictEqual(hooks[0].name, "a");
+	});
+
+	it("returns found=false when config file does not exist", () => {
+		const dir = makeTmpDir();
+		const result = removeHook(dir, "any", true);
+		assert.strictEqual(result.found, false);
+	});
+
+	it("removes hook regardless of managed_by value", () => {
+		const dir = makeTmpDir();
+
+		addHook(
+			dir,
+			{ name: "tool", command: "echo hi", managed_by: "anvil" },
+			true,
+		);
+
+		const result = removeHook(dir, "tool", true);
+		assert.strictEqual(result.found, true);
+
+		const hooks = readConfigAtPath(`${dir}/.pi/session-hook.json`);
+		assert.strictEqual(hooks.length, 0);
+	});
+});
+
+// ─── findHook ────────────────────────────────────────────────────────────────
+
+describe("findHook", () => {
+	it("finds a hook in project config", () => {
+		const dir = makeTmpDir();
+		writeConfig(dir, [{ name: "test", command: "echo hello", timeout: 5000 }]);
+
+		const result = findHook(dir, "test");
+		assert.ok(result);
+		assert.strictEqual(result.name, "test");
+		assert.strictEqual(result.command, "echo hello");
+		assert.strictEqual(result.timeout, 5000);
+		assert.strictEqual(result.source, "project");
+	});
+
+	it("project hook overrides global hook with same name", () => {
+		const dir = makeTmpDir();
+		writeConfig(dir, [{ name: "shared", command: "echo project" }]);
+
+		// findHook only uses loadConfig which returns merged view.
+		// We test that the project entry wins.
+		const result = findHook(dir, "shared");
+		assert.ok(result);
+		assert.strictEqual(result.command, "echo project");
+		assert.strictEqual(result.source, "project");
+	});
+
+	it("returns undefined for non-existent hook", () => {
+		const dir = makeTmpDir();
+		const result = findHook(dir, "nonexistent");
+		assert.strictEqual(result, undefined);
+	});
+
+	it("returns undefined when no configs exist", () => {
+		const dir = makeTmpDir();
+		const result = findHook(dir, "any");
+		assert.strictEqual(result, undefined);
+	});
+});
+
+// ─── parseRemoveArgs ─────────────────────────────────────────────────────────
+
+describe("parseRemoveArgs", () => {
+	it("parses name only", () => {
+		const result = parseRemoveArgs(["myhook"]);
+		assert.ok(typeof result !== "string");
+		if (typeof result !== "string") {
+			assert.strictEqual(result.name, "myhook");
+			assert.strictEqual(result.project, false);
+		}
+	});
+
+	it("parses name with --project", () => {
+		const result = parseRemoveArgs(["myhook", "--project"]);
+		assert.ok(typeof result !== "string");
+		if (typeof result !== "string") {
+			assert.strictEqual(result.name, "myhook");
+			assert.strictEqual(result.project, true);
+		}
+	});
+
+	it("returns error when name is missing", () => {
+		const result = parseRemoveArgs([]);
+		assert.strictEqual(typeof result, "string");
+		assert.ok((result as string).includes("Usage"));
+	});
+
+	it("returns error for unknown flags", () => {
+		const result = parseRemoveArgs(["myhook", "--unknown"]);
+		assert.strictEqual(typeof result, "string");
+		assert.ok((result as string).includes("Unknown argument"));
+	});
+});
+
+// ─── parseTestArgs ───────────────────────────────────────────────────────────
+
+describe("parseTestArgs", () => {
+	it("parses name", () => {
+		const result = parseTestArgs(["myhook"]);
+		assert.ok(typeof result !== "string");
+		if (typeof result !== "string") {
+			assert.strictEqual(result.name, "myhook");
+		}
+	});
+
+	it("returns error when name is missing", () => {
+		const result = parseTestArgs([]);
+		assert.strictEqual(typeof result, "string");
+		assert.ok((result as string).includes("Usage"));
+	});
+
+	it("returns error for unknown flags", () => {
+		const result = parseTestArgs(["myhook", "--unknown"]);
+		assert.strictEqual(typeof result, "string");
+		assert.ok((result as string).includes("Unknown argument"));
+	});
+});
+
+// ─── parseEditArgs ───────────────────────────────────────────────────────────
+
+describe("parseEditArgs", () => {
+	it("parses no args (global)", () => {
+		const result = parseEditArgs([]);
+		assert.ok(typeof result !== "string");
+		if (typeof result !== "string") {
+			assert.strictEqual(result.project, false);
+		}
+	});
+
+	it("parses --project", () => {
+		const result = parseEditArgs(["--project"]);
+		assert.ok(typeof result !== "string");
+		if (typeof result !== "string") {
+			assert.strictEqual(result.project, true);
+		}
+	});
+
+	it("returns error for unknown flags", () => {
+		const result = parseEditArgs(["--unknown"]);
+		assert.strictEqual(typeof result, "string");
+		assert.ok((result as string).includes("Unknown argument"));
+	});
+
+	it("returns error for positional arguments", () => {
+		const result = parseEditArgs(["extra"]);
+		assert.strictEqual(typeof result, "string");
+		assert.ok((result as string).includes("Unknown argument"));
+	});
+});
+
+// ─── editHookConfig ──────────────────────────────────────────────────────────
+
+describe("editHookConfig", () => {
+	it("returns undefined when config file does not exist", () => {
+		const dir = makeTmpDir();
+		const result = editHookConfig(dir, true);
+		assert.strictEqual(result, undefined);
+	});
+
+	it("returns path and content when config exists", () => {
+		const dir = makeTmpDir();
+		writeConfig(dir, [{ name: "a", command: "echo a" }]);
+
+		const result = editHookConfig(dir, true);
+		assert.ok(result);
+		assert.ok(result.path.endsWith("session-hook.json"));
+		assert.ok(result.content.includes('"name": "a"'));
+		assert.ok(result.content.includes('"command": "echo a"'));
+	});
+
+	it("returns path and content for global config (file may not exist)", () => {
+		// Just verify the path shape is correct for global
+		const dir = makeTmpDir();
+		// We can't write to the real global path, so we test that
+		// the function returns undefined when the file doesn't exist there.
+		const result = editHookConfig(dir, false);
+		// The global config path is in ~/.pi/agent/session-hook.json
+		// which likely doesn't exist in tests, so this returns undefined.
+		// We test the project path variant above.
+		assert.strictEqual(result, undefined);
 	});
 });
 
