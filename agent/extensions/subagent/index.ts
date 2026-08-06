@@ -24,6 +24,7 @@ import { Type } from "typebox";
 import type { AgentConfig } from "./agent-config.ts";
 import { type AgentScope, discoverAgents } from "./agents.ts";
 import { mapWithConcurrencyLimit } from "./concurrency.ts";
+import { validateModes } from "./orchestrator.ts";
 import { DEFAULT_CAPS, runSubagent } from "./engine.ts";
 import type { SubagentResult, SubagentUsage } from "./result-types.ts";
 import {
