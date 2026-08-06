@@ -1,14 +1,12 @@
 /**
- * Core execution engine — spawn, stream, detect completion, enforce caps.
+ * Core execution engine — event parsing, completion detection, and the
+ * SpawnFn seam where callers inject a process adapter.
  *
- * Extracted from index.ts so event parsing and completion detection
- * can be tested independently of process spawning.
+ * Pure event processing (processEvent, processEventLines, hasReportDone)
+ * is tested independently of process spawning. The SpawnFn interface lets
+ * tests inject a fake process spawner for integration testing.
  */
 
-import { type ChildProcess, spawn } from "node:child_process";
-import * as fs from "node:fs";
-import * as os from "node:os";
-import * as path from "node:path";
 import type { AgentConfig } from "./agent-config.ts";
 import type { SubagentResult, SubagentUsage } from "./result-types.ts";
 
@@ -16,6 +14,18 @@ import type { SubagentResult, SubagentUsage } from "./result-types.ts";
 
 // Re-export for backward compatibility and convenience.
 export type { SubagentResult, SubagentUsage };
+
+// ── Process spawner seam ──────────────────────────────────────
+
+/**
+ * Function type for spawning a subagent process.
+ *
+ * Accepts the full engine config and returns a SubagentResult.
+ * The real adapter (pi-process.ts) spawns a child process, streams
+ * JSON events, and enforces safety caps. Tests inject a fake that
+ * returns pre-determined events.
+ */
+export type SpawnFn = (config: EngineConfig) => Promise<SubagentResult>;
 
 export interface CapsConfig {
 	toolTimeout: number;
@@ -59,7 +69,7 @@ export interface EngineConfig {
 
 // ── Event types (subset of pi JSON events we care about) ─────
 
-interface PiEvent {
+export interface PiEvent {
 	type: string;
 	message?: Record<string, unknown> & {
 		role?: string;
@@ -202,300 +212,17 @@ export function processEventLines(lines: string[]): EventState {
 	return state;
 }
 
-// ── Process management ────────────────────────────────────────
-
-function getPiInvocation(args: string[]): { command: string; args: string[] } {
-	const currentScript = process.argv[1];
-	const isBunVirtualScript = currentScript?.startsWith("/$bunfs/root/");
-	if (currentScript && !isBunVirtualScript && fs.existsSync(currentScript)) {
-		return { command: process.execPath, args: [currentScript, ...args] };
-	}
-
-	const execName = path.basename(process.execPath).toLowerCase();
-	const isGenericRuntime = /^(node|bun)(\.exe)?$/.test(execName);
-	if (!isGenericRuntime) {
-		return { command: process.execPath, args };
-	}
-
-	return { command: "pi", args };
-}
-
-async function writePromptToTempFile(
-	agentName: string,
-	prompt: string,
-): Promise<{ dir: string; filePath: string }> {
-	const tmpDir = await fs.promises.mkdtemp(
-		path.join(os.tmpdir(), "pi-subagent-"),
-	);
-	const safeName = agentName.replace(/[^\w.-]+/g, "_");
-	const filePath = path.join(tmpDir, `prompt-${safeName}.md`);
-	await fs.promises.writeFile(filePath, prompt, {
-		encoding: "utf-8",
-		mode: 0o600,
-	});
-	return { dir: tmpDir, filePath };
-}
+// ── Spawn seam ───────────────────────────────────────────────
 
 /**
- * Kills a process with SIGTERM, then SIGKILL after a grace period.
+ * Runs a subagent by delegating to the provided SpawnFn.
+ *
+ * This is the injection point — callers pass the real process spawner
+ * (from pi-process.ts) in production, or a fake spawner in tests.
  */
-function killWithGrace(proc: ChildProcess, graceMs = 5000): void {
-	if (proc.killed || proc.exitCode !== null) return;
-	proc.kill("SIGTERM");
-	const killTimer = setTimeout(() => {
-		if (!proc.killed && proc.exitCode === null) {
-			proc.kill("SIGKILL");
-		}
-	}, graceMs);
-	// Clean up timer if process exits
-	proc.once("close", () => clearTimeout(killTimer));
-}
-
-/**
- * Spawns the subagent pi process, streams JSON events, enforces caps,
- * and returns a SingleResult.
- */
-export async function runSubagent(config: EngineConfig): Promise<SubagentResult> {
-	const { agent, task, cwd, caps, signal } = config;
-
-	const args: string[] = ["--mode", "json", "-p", "--no-session"];
-	if (agent.model) args.push("--model", agent.model);
-	if (agent.tools && agent.tools.length > 0)
-		args.push("--tools", agent.tools.join(","));
-
-	let tmpPromptDir: string | null = null;
-	let tmpPromptPath: string | null = null;
-
-	let state = initialEventState();
-	let stderr = "";
-
-	const result: SubagentResult = {
-		agent: agent.name,
-		agentSource: agent.source,
-		task,
-		exitCode: 0,
-		messages: [],
-		stderr: "",
-		usage: {
-			input: 0,
-			output: 0,
-			cacheRead: 0,
-			cacheWrite: 0,
-			cost: 0,
-			contextTokens: 0,
-			turns: 0,
-		},
-		model: agent.model,
-		completed: false,
-	};
-
-	try {
-		// Write system prompt to temp file
-		if (agent.systemPrompt.trim()) {
-			const tmp = await writePromptToTempFile(agent.name, agent.systemPrompt);
-			tmpPromptDir = tmp.dir;
-			tmpPromptPath = tmp.filePath;
-			args.push("--append-system-prompt", tmpPromptPath);
-		}
-
-		args.push(`Task: ${task}${COMPLETION_INSTRUCTION}`);
-
-		let wasAborted = false;
-		let timedOut = false;
-		let toolTimedOut = false;
-		let turnLimited = false;
-
-		const exitCode = await new Promise<number>((resolve) => {
-			const invocation = getPiInvocation(args);
-			const proc = spawn(invocation.command, invocation.args, {
-				cwd,
-				shell: false,
-				stdio: ["ignore", "pipe", "pipe"],
-			});
-
-			let buffer = "";
-
-			// ── Caps enforcement ──────────────────────────
-
-			let globalTimer: NodeJS.Timeout | undefined;
-			let toolTimer: NodeJS.Timeout | undefined;
-
-			const cleanupTimers = () => {
-				if (globalTimer) clearTimeout(globalTimer);
-				if (toolTimer) clearTimeout(toolTimer);
-			};
-
-			const forceKill = (
-				reason: "global_timeout" | "tool_timeout" | "turn_limit",
-			) => {
-				if (proc.killed || proc.exitCode !== null) return;
-				if (reason === "tool_timeout") toolTimedOut = true;
-				if (reason === "global_timeout") timedOut = true;
-				if (reason === "turn_limit") turnLimited = true;
-				killWithGrace(proc);
-			};
-
-			// Global process timeout
-			if (caps.globalTimeout > 0) {
-				globalTimer = setTimeout(
-					() => forceKill("global_timeout"),
-					caps.globalTimeout,
-				);
-				globalTimer.unref?.();
-			}
-
-			const clearToolTimer = () => {
-				if (toolTimer) {
-					clearTimeout(toolTimer);
-					toolTimer = undefined;
-				}
-			};
-
-			const startToolTimer = () => {
-				clearToolTimer();
-				if (caps.toolTimeout > 0) {
-					toolTimer = setTimeout(
-						() => forceKill("tool_timeout"),
-						caps.toolTimeout,
-					);
-					toolTimer.unref?.();
-				}
-			};
-
-			// ── Event processing ──────────────────────────
-
-			const processLine = (line: string) => {
-				if (!line.trim()) return;
-				let event: PiEvent;
-				try {
-					event = JSON.parse(line);
-				} catch {
-					return;
-				}
-
-				// Track tool calls for tool-level timeout
-				if (
-					event.type === "message_end" &&
-					event.message?.role === "assistant"
-				) {
-					const msg = event.message;
-					// Check if the assistant started a new tool call
-					let hasPendingToolCall = false;
-					const content = msg.content as
-						| Array<Record<string, unknown>>
-						| undefined;
-					if (content) {
-						for (const part of content) {
-							if (part.type === "toolCall") {
-								hasPendingToolCall = true;
-								break;
-							}
-						}
-					}
-					if (hasPendingToolCall) {
-						startToolTimer();
-					}
-				}
-
-				if (event.type === "tool_result_end") {
-					clearToolTimer();
-				}
-
-				state = processEvent(state, event);
-
-				// Notify listener
-				config.onEvent?.(state);
-
-				// Check turn limit
-				if (caps.maxTurns > 0 && state.usage.turns > caps.maxTurns) {
-					forceKill("turn_limit");
-				}
-			};
-
-			proc.stdout.on("data", (data: Buffer) => {
-				buffer += data.toString();
-				const lines = buffer.split("\n");
-				buffer = lines.pop() || "";
-				for (const line of lines) processLine(line);
-			});
-
-			proc.stderr.on("data", (data: Buffer) => {
-				stderr += data.toString();
-			});
-
-			proc.on("close", (code) => {
-				cleanupTimers();
-				clearToolTimer();
-				if (buffer.trim()) processLine(buffer);
-				resolve(code ?? 0);
-			});
-
-			proc.on("error", () => {
-				cleanupTimers();
-				clearToolTimer();
-				resolve(1);
-			});
-
-			// External abort signal
-			if (signal) {
-				const onAbort = () => {
-					wasAborted = true;
-					killWithGrace(proc);
-				};
-				if (signal.aborted) {
-					onAbort();
-				} else {
-					signal.addEventListener("abort", onAbort, { once: true });
-				}
-			}
-		});
-
-		// Build result
-		result.exitCode = exitCode;
-		result.messages = state.messages;
-		result.stderr = stderr;
-		result.usage = state.usage;
-		result.model = state.model || agent.model;
-		result.completed = state.completed;
-		result.reportDoneStatus = state.reportDoneStatus;
-		result.reportDoneSummary = state.reportDoneSummary;
-		result.reportDoneFindings = state.reportDoneFindings;
-
-		if (wasAborted) {
-			result.stopReason = "aborted";
-			result.errorMessage = "Subagent was aborted";
-		} else if (toolTimedOut) {
-			result.stopReason = "tool_timeout";
-			result.errorMessage = `Tool call exceeded ${caps.toolTimeout / 1000}s timeout`;
-		} else if (timedOut) {
-			result.stopReason = "timeout";
-			result.errorMessage = `Subagent timed out after ${caps.globalTimeout / 1000}s`;
-		} else if (turnLimited) {
-			result.stopReason = "turn_limit";
-			result.errorMessage = `Subagent exceeded turn limit of ${caps.maxTurns} turns`;
-		} else if (!state.completed) {
-			result.stopReason = "incomplete";
-			result.errorMessage = "Subagent exited without calling report_done";
-		} else {
-			result.stopReason = state.stopReason || "completed";
-		}
-
-		return result;
-	} finally {
-		// Clean up temp files
-		if (tmpPromptPath) {
-			try {
-				fs.unlinkSync(tmpPromptPath);
-			} catch {
-				/* ignore */
-			}
-		}
-		if (tmpPromptDir) {
-			try {
-				fs.rmdirSync(tmpPromptDir);
-			} catch {
-				/* ignore */
-			}
-		}
-	}
+export async function runSubagent(
+	config: EngineConfig,
+	spawnFn: SpawnFn,
+): Promise<SubagentResult> {
+	return spawnFn(config);
 }

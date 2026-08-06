@@ -4,10 +4,12 @@
  */
 
 import assert from "node:assert";
+import * as fs from "node:fs";
+import * as path from "node:path";
 import { describe, it } from "node:test";
 import { mapWithConcurrencyLimit } from "./concurrency.ts";
 import { validateModes } from "./orchestrator.ts";
-import { isFailedResult } from "./toon-formatter.ts";
+import { isFailedResult } from "./status.ts";
 
 // ── mapWithConcurrencyLimit ───────────────────────────────────
 
@@ -216,7 +218,7 @@ describe("max parallel tasks", () => {
 
 describe("chain orchestration", () => {
 	it("stops on first failure", () => {
-		// Uses real isFailedResult from toon-formatter.ts
+		// Uses real isFailedResult from status.ts
 		const results: Array<{
 			agent: string;
 			exitCode: number;
@@ -391,5 +393,154 @@ describe("aggregate result counting", () => {
 
 		const failCount = results.filter(isFailedResult).length;
 		assert.strictEqual(failCount, 3);
+	});
+});
+
+// ── Tool registration smoke test ──────────────────────────────
+//
+// index.ts imports from pi runtime packages (@earendil-works/pi-ai,
+// @earendil-works/pi-agent-core, @earendil-works/pi-coding-agent) that
+// are bundled in the pi binary and not available as standalone npm
+// packages. We validate tool registration structurally by inspecting
+// the source file — same pattern as builtin-agents.test.ts which reads
+// agent .md files from disk.
+
+const INDEX_PATH = path.resolve(import.meta.dirname, "index.ts");
+const indexSource = fs.readFileSync(INDEX_PATH, "utf-8");
+
+describe("tool registration", () => {
+	it("exports a default function that accepts ExtensionAPI", () => {
+		// Verify the export pattern: export default function (pi: ExtensionAPI)
+		assert.ok(
+			/export\s+default\s+function\s*\(\s*pi\s*:\s*ExtensionAPI\s*\)/.test(
+				indexSource,
+			),
+			"should export a default function accepting pi: ExtensionAPI",
+		);
+	});
+
+	it("registers exactly two tools", () => {
+		const registerCalls = indexSource.match(/pi\.registerTool\(/g);
+		assert.ok(registerCalls, "should have registerTool calls");
+		assert.strictEqual(
+			registerCalls!.length,
+			2,
+			"should register exactly 2 tools",
+		);
+	});
+
+	it("registers report_done as the first tool", () => {
+		// report_done MUST be first — it's the completion contract tool
+		const match = indexSource.match(
+			/pi\.registerTool\(\{[^}]*name:\s*["']report_done["']/s,
+		);
+		assert.ok(match, "should register report_done tool");
+
+		// Verify position: report_done comes before subagent
+		const rdIndex = indexSource.indexOf('name: "report_done"');
+		const saIndex = indexSource.indexOf('name: "subagent"');
+		assert.ok(
+			rdIndex < saIndex,
+			"report_done should be registered before subagent",
+		);
+	});
+
+	it("registers subagent as the second tool", () => {
+		const match = indexSource.match(
+			/pi\.registerTool\(\{[^}]*name:\s*["']subagent["']/s,
+		);
+		assert.ok(match, "should register subagent tool");
+	});
+
+	it("report_done tool has execute function", () => {
+		// Extract the report_done registration block
+		const rdStart = indexSource.indexOf('name: "report_done"');
+		const saStart = indexSource.indexOf('name: "subagent"');
+		const rdBlock = indexSource.slice(rdStart, saStart);
+
+		assert.ok(
+			rdBlock.includes("async execute"),
+			"report_done should have async execute",
+		);
+		assert.ok(
+			rdBlock.includes('type: "text"'),
+			"report_done execute should return text content",
+		);
+		assert.ok(
+			rdBlock.includes("params.status"),
+			"report_done execute should reference params.status",
+		);
+		assert.ok(
+			rdBlock.includes("params.summary"),
+			"report_done execute should reference params.summary",
+		);
+	});
+
+	it("subagent tool has execute, renderCall, and renderResult", () => {
+		const saStart = indexSource.indexOf('name: "subagent"');
+		// Find the end: the closing of registerTool + end of pi.registerTool call
+		const saBlock = indexSource.slice(saStart);
+
+		assert.ok(
+			saBlock.includes("async execute"),
+			"subagent should have async execute",
+		);
+		assert.ok(
+			saBlock.includes("renderCall"),
+			"subagent should have renderCall",
+		);
+		assert.ok(
+			saBlock.includes("renderResult"),
+			"subagent should have renderResult",
+		);
+	});
+
+	it("report_done parameters define status, summary, and findings", () => {
+		// ReportDoneParams is a TypeBox Object defined before the registerTool call.
+		// The registerTool references it as `parameters: ReportDoneParams`.
+		const rdStart = indexSource.indexOf("ReportDoneParams");
+		const defaultExport = indexSource.indexOf("export default", rdStart);
+		const paramsBlock = indexSource.slice(rdStart, defaultExport);
+
+		assert.ok(
+			paramsBlock.includes("status:"),
+			"ReportDoneParams should include status",
+		);
+		assert.ok(
+			paramsBlock.includes("summary:"),
+			"ReportDoneParams should include summary",
+		);
+		assert.ok(
+			paramsBlock.includes("findings:"),
+			"ReportDoneParams should include findings",
+		);
+	});
+
+	it("subagent parameters define agent, task, tasks, chain, agentScope", () => {
+		// SubagentParams is defined before the registerTool call.
+		const saStart = indexSource.indexOf("SubagentParams");
+		const nextFn = indexSource.indexOf("export default", saStart);
+		const paramsBlock = indexSource.slice(saStart, nextFn);
+
+		assert.ok(
+			paramsBlock.includes("agent:"),
+			"SubagentParams should include agent",
+		);
+		assert.ok(
+			paramsBlock.includes("task:"),
+			"SubagentParams should include task",
+		);
+		assert.ok(
+			paramsBlock.includes("tasks:"),
+			"SubagentParams should include tasks",
+		);
+		assert.ok(
+			paramsBlock.includes("chain:"),
+			"SubagentParams should include chain",
+		);
+		assert.ok(
+			paramsBlock.includes("agentScope:"),
+			"SubagentParams should include agentScope",
+		);
 	});
 });

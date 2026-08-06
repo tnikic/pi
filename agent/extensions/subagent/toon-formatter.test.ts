@@ -9,15 +9,17 @@ import { describe, it } from "node:test";
 import type { SubagentResult, SubagentUsage } from "./result-types.ts";
 import {
 	displayStatus,
+	formatUsageAggregate,
+	isFailedResult,
+} from "./status.ts";
+import {
 	formatChainToon,
 	formatErrorToon,
 	formatParallelToon,
 	formatSingleToon,
 	formatTokens,
-	formatUsageAggregate,
-	isFailedResult,
 	toonQuote,
-} from "./toon-formatter.ts";
+} from "./toon-serialize.ts";
 
 // ── Helpers ───────────────────────────────────────────────────
 

@@ -3,12 +3,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { describe, it } from "node:test";
 
-const AGENTS_DIR = path.resolve(
-	import.meta.dirname,
-	"..",
-	"..",
-	"agents",
-);
+const AGENTS_DIR = path.resolve(import.meta.dirname, "..", "..", "agents");
 
 interface AgentFrontmatter {
 	name: string;
@@ -204,7 +199,10 @@ describe("built-in agent definitions", () => {
 		});
 		it("defines key vocabulary terms", () => {
 			assert.ok(agent!.body.includes("**Module**"), "should define Module");
-			assert.ok(agent!.body.includes("**Interface**"), "should define Interface");
+			assert.ok(
+				agent!.body.includes("**Interface**"),
+				"should define Interface",
+			);
 			assert.ok(agent!.body.includes("**Depth**"), "should define Depth");
 			assert.ok(agent!.body.includes("**Seam**"), "should define Seam");
 			assert.ok(agent!.body.includes("**Leverage**"), "should define Leverage");

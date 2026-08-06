@@ -12,15 +12,15 @@
 import { getMarkdownTheme } from "@earendil-works/pi-coding-agent";
 import { Container, Markdown, Spacer, Text } from "@earendil-works/pi-tui";
 import type { AgentScope } from "./agents.ts";
-import type { SubagentResult, SubagentUsage } from "./result-types.ts";
 import {
 	type DisplayItem,
 	formatToolCall,
 	formatUsageStats,
 	getDisplayItems,
 	getFinalOutput,
-	isFailedResult,
-} from "./toon-formatter.ts";
+} from "./display-helpers.ts";
+import type { SubagentResult } from "./result-types.ts";
+import { isFailedResult } from "./status.ts";
 
 // ── Theme (minimal interface) ─────────────────────────────────
 
@@ -54,8 +54,7 @@ function renderDisplayItems(
 	const toShow = limit ? items.slice(-limit) : items;
 	const skipped = limit && items.length > limit ? items.length - limit : 0;
 	let text = "";
-	if (skipped > 0)
-		text += theme.fg("muted", `... ${skipped} earlier items\n`);
+	if (skipped > 0) text += theme.fg("muted", `... ${skipped} earlier items\n`);
 	for (let i = 0; i < toShow.length; i++) {
 		const item = toShow[i];
 		const isLast = i === toShow.length - 1;
@@ -73,27 +72,6 @@ function renderDisplayItems(
 		}
 	}
 	return text.trimEnd();
-}
-
-function aggregateUsage(results: SubagentResult[]): SubagentUsage {
-	const total: SubagentUsage = {
-		input: 0,
-		output: 0,
-		cacheRead: 0,
-		cacheWrite: 0,
-		cost: 0,
-		contextTokens: 0,
-		turns: 0,
-	};
-	for (const r of results) {
-		total.input += r.usage.input;
-		total.output += r.usage.output;
-		total.cacheRead += r.usage.cacheRead;
-		total.cacheWrite += r.usage.cacheWrite;
-		total.cost += r.usage.cost;
-		total.turns += r.usage.turns;
-	}
-	return total;
 }
 
 // ── renderCall ────────────────────────────────────────────────
@@ -116,7 +94,9 @@ export function renderCall(
 		for (let i = 0; i < Math.min(args.chain.length, 3); i++) {
 			const step = args.chain[i] as Record<string, unknown>;
 			// Clean up {previous} placeholder for display
-			const cleanTask = (step.task as string).replace(/\{previous\}/g, "").trim();
+			const cleanTask = (step.task as string)
+				.replace(/\{previous\}/g, "")
+				.trim();
 			const preview =
 				cleanTask.length > 40 ? `${cleanTask.slice(0, 40)}...` : cleanTask;
 			text +=
@@ -175,9 +155,7 @@ function renderSingleResult(
 ): Text | Container {
 	const r = details.results[0];
 	const isError = isFailedResult(r);
-	const icon = isError
-		? theme.fg("error", "✗")
-		: theme.fg("success", "✓");
+	const icon = isError ? theme.fg("error", "✗") : theme.fg("success", "✓");
 	const displayItems = getDisplayItems(r.messages);
 	const finalOutput = getFinalOutput(r.messages);
 
@@ -195,24 +173,16 @@ function renderSingleResult(
 		container.addChild(new Text(theme.fg("muted", "─── Task ───"), 0, 0));
 		container.addChild(new Text(theme.fg("dim", r.task), 0, 0));
 		container.addChild(new Spacer(1));
-		container.addChild(
-			new Text(theme.fg("muted", "─── Output ───"), 0, 0),
-		);
+		container.addChild(new Text(theme.fg("muted", "─── Output ───"), 0, 0));
 		if (displayItems.length === 0 && !finalOutput) {
-			container.addChild(
-				new Text(theme.fg("muted", "(no output)"), 0, 0),
-			);
+			container.addChild(new Text(theme.fg("muted", "(no output)"), 0, 0));
 		} else {
 			for (const item of displayItems) {
 				if (item.type === "toolCall")
 					container.addChild(
 						new Text(
 							theme.fg("muted", "→ ") +
-								formatToolCall(
-									item.name,
-									item.args,
-									theme.fg.bind(theme),
-								),
+								formatToolCall(item.name, item.args, theme.fg.bind(theme)),
 							0,
 							0,
 						),
@@ -220,9 +190,7 @@ function renderSingleResult(
 			}
 			if (finalOutput) {
 				container.addChild(new Spacer(1));
-				container.addChild(
-					new Markdown(finalOutput.trim(), 0, 0, mdTheme),
-				);
+				container.addChild(new Markdown(finalOutput.trim(), 0, 0, mdTheme));
 			}
 		}
 		const usageStr = formatUsageStats(r.usage, r.model);
@@ -262,9 +230,7 @@ function renderChainResult(
 	theme: RenderTheme,
 	mdTheme: ReturnType<typeof getMarkdownTheme>,
 ): Text | Container {
-	const successCount = details.results.filter(
-		(r) => r.exitCode === 0,
-	).length;
+	const successCount = details.results.filter((r) => r.exitCode === 0).length;
 	const icon =
 		successCount === details.results.length
 			? theme.fg("success", "✓")
@@ -277,10 +243,7 @@ function renderChainResult(
 				icon +
 					" " +
 					theme.fg("toolTitle", theme.bold("chain ")) +
-					theme.fg(
-						"accent",
-						`${successCount}/${details.results.length} steps`,
-					),
+					theme.fg("accent", `${successCount}/${details.results.length} steps`),
 				0,
 				0,
 			),
@@ -288,9 +251,7 @@ function renderChainResult(
 
 		for (const r of details.results) {
 			const rIcon =
-				r.exitCode === 0
-					? theme.fg("success", "✓")
-					: theme.fg("error", "✗");
+				r.exitCode === 0 ? theme.fg("success", "✓") : theme.fg("error", "✗");
 			const displayItems = getDisplayItems(r.messages);
 			const finalOutput = getFinalOutput(r.messages);
 
@@ -303,11 +264,7 @@ function renderChainResult(
 				),
 			);
 			container.addChild(
-				new Text(
-					theme.fg("muted", "Task: ") + theme.fg("dim", r.task),
-					0,
-					0,
-				),
+				new Text(theme.fg("muted", "Task: ") + theme.fg("dim", r.task), 0, 0),
 			);
 
 			// Show tool calls
@@ -316,11 +273,7 @@ function renderChainResult(
 					container.addChild(
 						new Text(
 							theme.fg("muted", "→ ") +
-								formatToolCall(
-									item.name,
-									item.args,
-									theme.fg.bind(theme),
-								),
+								formatToolCall(item.name, item.args, theme.fg.bind(theme)),
 							0,
 							0,
 						),
@@ -331,9 +284,7 @@ function renderChainResult(
 			// Show final output as markdown
 			if (finalOutput) {
 				container.addChild(new Spacer(1));
-				container.addChild(
-					new Markdown(finalOutput.trim(), 0, 0, mdTheme),
-				);
+				container.addChild(new Markdown(finalOutput.trim(), 0, 0, mdTheme));
 			}
 
 			const stepUsage = formatUsageStats(r.usage, r.model);
@@ -341,12 +292,10 @@ function renderChainResult(
 				container.addChild(new Text(theme.fg("dim", stepUsage), 0, 0));
 		}
 
-		const usageStr = formatUsageStats(aggregateUsage(details.results));
+		const usageStr = formatUsageStats(formatUsageAggregate(details.results));
 		if (usageStr) {
 			container.addChild(new Spacer(1));
-			container.addChild(
-				new Text(theme.fg("dim", `Total: ${usageStr}`), 0, 0),
-			);
+			container.addChild(new Text(theme.fg("dim", `Total: ${usageStr}`), 0, 0));
 		}
 		return container;
 	}
@@ -359,9 +308,7 @@ function renderChainResult(
 		theme.fg("accent", `${successCount}/${details.results.length} steps`);
 	for (const r of details.results) {
 		const rIcon =
-			r.exitCode === 0
-				? theme.fg("success", "✓")
-				: theme.fg("error", "✗");
+			r.exitCode === 0 ? theme.fg("success", "✓") : theme.fg("error", "✗");
 		const displayItems = getDisplayItems(r.messages);
 		text += `\n\n${theme.fg("muted", `─── Step ${r.step}: `)}${theme.fg("accent", r.agent)} ${rIcon}`;
 		if (displayItems.length === 0)
@@ -371,7 +318,7 @@ function renderChainResult(
 			text += `\n${renderDisplayItems(displayItems, theme, expanded, 3, isRunning)}`;
 		}
 	}
-	const usageStr = formatUsageStats(aggregateUsage(details.results));
+	const usageStr = formatUsageStats(formatUsageAggregate(details.results));
 	if (usageStr) text += `\n\n${theme.fg("dim", `Total: ${usageStr}`)}`;
 	text += `\n${theme.fg("muted", "(Ctrl+O to expand)")}`;
 	return new Text(text, 0, 0);
@@ -431,11 +378,7 @@ function renderParallelResult(
 				),
 			);
 			container.addChild(
-				new Text(
-					theme.fg("muted", "Task: ") + theme.fg("dim", r.task),
-					0,
-					0,
-				),
+				new Text(theme.fg("muted", "Task: ") + theme.fg("dim", r.task), 0, 0),
 			);
 
 			// Show tool calls
@@ -444,11 +387,7 @@ function renderParallelResult(
 					container.addChild(
 						new Text(
 							theme.fg("muted", "→ ") +
-								formatToolCall(
-									item.name,
-									item.args,
-									theme.fg.bind(theme),
-								),
+								formatToolCall(item.name, item.args, theme.fg.bind(theme)),
 							0,
 							0,
 						),
@@ -459,9 +398,7 @@ function renderParallelResult(
 			// Show final output as markdown
 			if (finalOutput) {
 				container.addChild(new Spacer(1));
-				container.addChild(
-					new Markdown(finalOutput.trim(), 0, 0, mdTheme),
-				);
+				container.addChild(new Markdown(finalOutput.trim(), 0, 0, mdTheme));
 			}
 
 			const taskUsage = formatUsageStats(r.usage, r.model);
@@ -469,12 +406,10 @@ function renderParallelResult(
 				container.addChild(new Text(theme.fg("dim", taskUsage), 0, 0));
 		}
 
-		const usageStr = formatUsageStats(aggregateUsage(details.results));
+		const usageStr = formatUsageStats(formatUsageAggregate(details.results));
 		if (usageStr) {
 			container.addChild(new Spacer(1));
-			container.addChild(
-				new Text(theme.fg("dim", `Total: ${usageStr}`), 0, 0),
-			);
+			container.addChild(new Text(theme.fg("dim", `Total: ${usageStr}`), 0, 0));
 		}
 		return container;
 	}
@@ -498,7 +433,7 @@ function renderParallelResult(
 		}
 	}
 	if (!isRunning) {
-		const usageStr = formatUsageStats(aggregateUsage(details.results));
+		const usageStr = formatUsageStats(formatUsageAggregate(details.results));
 		if (usageStr) text += `\n\n${theme.fg("dim", `Total: ${usageStr}`)}`;
 	}
 	if (!expanded) text += `\n${theme.fg("muted", "(Ctrl+O to expand)")}`;
@@ -512,7 +447,10 @@ function renderParallelResult(
  * Exported for use by index.ts tool registration.
  */
 export function renderResult(
-	result: { content: Array<{ type: string; text?: string }>; details?: unknown },
+	result: {
+		content: Array<{ type: string; text?: string }>;
+		details?: unknown;
+	},
 	{ expanded }: { expanded: boolean },
 	theme: RenderTheme,
 	_context: unknown,
@@ -520,11 +458,7 @@ export function renderResult(
 	const details = result.details as SubagentDetails | undefined;
 	if (!details || details.results.length === 0) {
 		const text = result.content[0];
-		return new Text(
-			text?.type === "text" ? text.text : "(no output)",
-			0,
-			0,
-		);
+		return new Text(text?.type === "text" ? text.text : "(no output)", 0, 0);
 	}
 
 	const mdTheme = getMarkdownTheme();
