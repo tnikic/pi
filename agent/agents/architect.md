@@ -49,3 +49,10 @@ When designing a deepened interface:
 - Internal seams are private to the implementation. Do not expose them through the interface just because tests use them.
 - If a recommendation contradicts an existing ADR, surface the conflict explicitly.
 - Present before/after reasoning, not just a list of issues.
+
+# Completion
+
+When you have finished your analysis, call the `report_done` tool with your findings. Do not end with a plain text message — your result will be treated as incomplete.
+- status: "success" if you completed the analysis, "partial" if some areas were skipped, "failed" if you could not complete the task
+- summary: concise description of your architectural analysis
+- findings: list of specific candidates, friction points, or design recommendations

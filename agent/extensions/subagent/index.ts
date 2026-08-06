@@ -199,7 +199,41 @@ const SubagentParams = Type.Object({
 	),
 });
 
+const ReportDoneParams = Type.Object({
+	status: Type.String({
+		description:
+			"Completion status: success (task completed), partial (some parts done), or failed (could not complete)",
+	}),
+	summary: Type.String({
+		description: "Summary of what was accomplished",
+	}),
+	findings: Type.Optional(
+		Type.Array(Type.String(), {
+			description:
+				"Optional list of findings (files changed, discoveries, etc.)",
+		}),
+	),
+});
+
 export default function (pi: ExtensionAPI) {
+	pi.registerTool({
+		name: "report_done",
+		label: "Report Done",
+		description:
+			"Signal that a subagent task is complete. MUST be called as the final action of every subagent invocation. Without this call the result is treated as incomplete.",
+		parameters: ReportDoneParams,
+		async execute(_toolCallId, params) {
+			return {
+				content: [
+					{
+						type: "text",
+						text: `Task complete (${params.status}): ${params.summary}`,
+					},
+				],
+			};
+		},
+	});
+
 	pi.registerTool({
 		name: "subagent",
 		label: "Subagent",

@@ -24,7 +24,7 @@ export interface CapsConfig {
 }
 
 export const DEFAULT_CAPS: CapsConfig = {
-	toolTimeout: 60_000, // 60s
+	toolTimeout: 120_000, // 120s
 	globalTimeout: 300_000, // 5 min
 	maxTurns: 20,
 };
@@ -280,7 +280,21 @@ export async function runSubagent(config: EngineConfig): Promise<SubagentResult>
 			args.push("--append-system-prompt", tmpPromptPath);
 		}
 
-		args.push(`Task: ${task}`);
+		const completionInstruction = [
+			"",
+			"---",
+			"## Completion contract",
+			"",
+			"When you have finished the task above, you MUST call the `report_done` tool as your final action.",
+			"Do not end with a plain text message — your result will be treated as incomplete.",
+			"",
+			"The `report_done` tool accepts:",
+			'- status: "success" (task completed fully), "partial" (some parts done), or "failed" (could not complete)',
+			"- summary: a concise description of what was accomplished",
+			"- findings (optional): list of specific findings, files changed, or discoveries",
+		].join("\n");
+
+		args.push(`Task: ${task}${completionInstruction}`);
 
 		let wasAborted = false;
 		let timedOut = false;

@@ -27,6 +27,13 @@ When given an audit task:
 - Never report "no issues found" without having actually run tools and reviewed every changed file.
 - If the task specifies output sections (e.g., Standards, Spec, Coverage), follow that structure exactly.
 
+# Completion
+
+When you have finished your audit, call the `report_done` tool with your findings. Do not end with a plain text message — your result will be treated as incomplete.
+- status: "success" if the audit completed, "partial" if some files or rules were skipped, "failed" if you could not complete the task
+- summary: concise description of your audit results
+- findings: list of violations, judgment calls, and smells detected
+
 # Common Reference: Code Smell Baseline
 
 The following smells apply as a baseline unless a documented standard overrides them. Each is a labeled heuristic, not a hard violation:
