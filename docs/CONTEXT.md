@@ -1,4 +1,8 @@
-# Subagent Extension
+# Pi Config
+
+Extensions and configuration for the pi coding agent.
+
+## Subagent Extension
 
 A pi extension that delegates tasks to specialized subagents running in isolated pi processes, supporting single, parallel, and chained execution modes.
 
@@ -49,3 +53,33 @@ _Avoid_: scout, designer, explorer
 **Agent definition**:
 A markdown file in `~/.pi/agent/agents/` (user) or `.pi/agents/` (project) with YAML frontmatter (`name`, `description`, optional `tools`, `model`, `timeout`, `maxTurns`, `toolTimeout`) and a system prompt body. Discovered by the subagent extension at invocation time.
 _Avoid_: agent config, agent spec, agent file
+
+## Session Hook Extension
+
+A pi extension that runs named shell commands at session start and injects their output as ambient context for the agent. Also supports session-end capture for per-project session memory.
+
+### Language
+
+**Session hook**:
+A named shell command registered in `session-hook.json` that runs at session start (and optionally at session end). Its output is injected into the agent's context as ambient information.
+_Avoid_: startup hook, bootstrap command
+
+**Hook config**:
+A JSON file (`session-hook.json`) containing an array of hook entries, each with a `name`, `command`, and optional `timeout`, `managed_by`, and `session_end_command`. Stored globally at `~/.pi/agent/session-hook.json` or per-project at `.pi/session-hook.json`.
+_Avoid_: hook registry, hook manifest
+
+**Managed-by marker**:
+The `managed_by` field on a hook entry that identifies which tool owns it. Tools use this to idempotently update their own hooks without clobbering hooks owned by other tools or the user.
+_Avoid_: owner field, source tag
+
+**Ambient context**:
+Context injected into the agent's session at startup without the agent having to invoke a tool. The agent sees it as given, not as the result of an action it took.
+_Avoid_: preloaded context, bootstrap context
+
+**Session-end command**:
+A tool-specific command declared via `session_end_command` on a hook entry. Runs at `session_shutdown` to capture what happened (issues referenced, PRs touched, etc.). Output is stored as session memory and surfaced inline in the next session's hook output.
+_Avoid_: shutdown hook, teardown command, capture script
+
+**Session memory**:
+Per-tool, per-project data captured by session-end commands and stored in `session-hook/memory.json`. Surfaced as a compact "last session:" line in the tool's session-start output block so the next session inherits awareness of what happened previously.
+_Avoid_: session history, session delta, context carryover
