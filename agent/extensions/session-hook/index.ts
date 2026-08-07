@@ -1,9 +1,10 @@
 /**
  * Session Hook Extension — runs user-configured shell commands at session start
- * and injects their output as ambient context before the first agent turn.
+ * and injects their output as ambient context for the agent. At session end,
+ * runs session_end_commands to capture per-tool session memory.
  *
  * Provides /session-hook slash commands for interactive hook management:
- *   add <name> --command <cmd> [--timeout <ms>] [--project]
+ *   add <name> --command <cmd> [--timeout <ms>] [--end-command <cmd>] [--project]
  *   list
  */
 
@@ -16,9 +17,8 @@ import {
 	findHook,
 	formatHookOutput,
 	type HookEntry,
-	type HookRunState,
-	listHooks,
 	loadConfig,
+	loadMemory,
 	parseAddArgs,
 	parseArgs,
 	parseEditArgs,
@@ -26,39 +26,104 @@ import {
 	parseTestArgs,
 	removeHook,
 	runHooks,
+	type SessionMemory,
+	writeMemory,
 	writeConfigAtPath,
 } from "./engine.ts";
-
-/** Module-level state: populated at session_start, consumed at before_agent_start. */
-let currentState: HookRunState | null = null;
 
 // ─── Extension ───────────────────────────────────────────────────────────────
 
 export default function (pi: ExtensionAPI) {
 	pi.on("session_start", async (_event, ctx) => {
 		const config = loadConfig(ctx.cwd);
-		if (!config) {
-			currentState = null;
-			return;
-		}
+		if (!config) return;
 
 		const state = await runHooks(config, ctx.cwd);
-		currentState = state;
-	});
+		if (!state.hadHooks) return;
 
-	pi.on("before_agent_start", async (_event, _ctx) => {
-		if (!currentState?.hadHooks) return;
-
-		const content = formatHookOutput(currentState);
+		const memory = loadMemory(ctx.cwd);
+		const content = formatHookOutput(state, memory);
 		if (!content) return;
 
-		return {
-			message: {
-				customType: "session-hook",
-				content,
-				display: true,
-			},
-		};
+		// Inject hook output into agent context silently (agent sees it, user doesn't)
+		pi.sendMessage({
+			customType: "session-hook",
+			content,
+			display: false,
+		});
+
+		// Compact notification for the user
+		const names = state.results.map((r) => r.name).join(", ");
+		ctx.ui.notify(`Session hooks: ${names}`, "info");
+	});
+
+	pi.on("session_shutdown", async (_event, ctx) => {
+		const config = loadConfig(ctx.cwd);
+		if (!config) return;
+
+		// Collect session-end commands, grouped by scope (global vs project)
+		const allHooks = listHooks(ctx.cwd);
+		const endCommands: { entry: HookEntry; project: boolean }[] = [];
+		for (const entry of config.hooks) {
+			if (!entry.session_end_command) continue;
+
+			const source = allHooks.find((h) => h.name === entry.name)?.source;
+			endCommands.push({
+				entry,
+				project: source === "project",
+			});
+		}
+
+		if (endCommands.length === 0) return;
+
+		// Run session-end commands in parallel
+		const results = await Promise.all(
+			endCommands.map(async ({ entry, project }) => {
+				const command = entry.session_end_command;
+				if (!command) {
+					return {
+						name: entry.name,
+						result: {
+							name: entry.name,
+							success: false,
+							output: "",
+							error: "missing session_end_command",
+						},
+						project,
+					};
+				}
+				const result = await executeHook(
+					{ name: entry.name, command },
+					ctx.cwd,
+				);
+				return { name: entry.name, result, project };
+			}),
+		);
+
+		// Build per-scope memory and write
+		const globalMemory: SessionMemory = {};
+		const projectMemory: SessionMemory = {};
+
+		for (const { name, result, project } of results) {
+			const memEntry = {
+				output: result.success
+					? result.output.trim() || "(no output)"
+					: `error: ${result.error}`,
+				timestamp: Date.now(),
+			};
+			if (project) {
+				projectMemory[name] = memEntry;
+			} else {
+				globalMemory[name] = memEntry;
+			}
+		}
+
+		if (Object.keys(globalMemory).length > 0) {
+			writeMemory(ctx.cwd, false, globalMemory);
+		}
+		if (Object.keys(projectMemory).length > 0) {
+			writeMemory(ctx.cwd, true, projectMemory);
+		}
 	});
 
 	// ── /session-hook command ─────────────────────────────────────────────
@@ -95,6 +160,9 @@ export default function (pi: ExtensionAPI) {
 					if (result.timeout !== undefined) {
 						entry.timeout = result.timeout;
 					}
+					if (result.endCommand !== undefined) {
+						entry.session_end_command = result.endCommand;
+					}
 
 					const { overwrote } = addHook(ctx.cwd, entry, result.project);
 
@@ -104,9 +172,12 @@ export default function (pi: ExtensionAPI) {
 						entry.timeout !== undefined
 							? ` (timeout: ${entry.timeout}ms)`
 							: ` (default timeout: ${DEFAULT_TIMEOUT_MS}ms)`;
+					const endInfo = entry.session_end_command
+						? `, end-command: ${entry.session_end_command}`
+						: "";
 
 					ctx.ui.notify(
-						`${action} hook "${result.name}" in ${target} config${timeoutInfo}`,
+						`${action} hook "${result.name}" in ${target} config${timeoutInfo}${endInfo}`,
 						"info",
 					);
 					return;
@@ -126,7 +197,10 @@ export default function (pi: ExtensionAPI) {
 							h.timeout !== undefined
 								? `${h.timeout}ms`
 								: `${DEFAULT_TIMEOUT_MS}ms (default)`;
-						return `${h.name}  [${h.source}]  managed_by: ${managed}  timeout: ${timeout}  command: ${h.command}`;
+						const endCmd = h.session_end_command
+							? `  end-command: ${h.session_end_command}`
+							: "";
+						return `${h.name}  [${h.source}]  managed_by: ${managed}  timeout: ${timeout}  command: ${h.command}${endCmd}`;
 					});
 
 					await ctx.ui.select("Session Hooks", items);
@@ -144,8 +218,6 @@ export default function (pi: ExtensionAPI) {
 					const hook = findHook(ctx.cwd, parsed.name);
 
 					if (!hook && !parsed.project) {
-						// For global, check if it exists at all (merged view).
-						// If it's only in project config, tell the user to use --project.
 						const projectHooks = listHooks(ctx.cwd).filter(
 							(h) => h.source === "project" && h.name === parsed.name,
 						);
@@ -245,11 +317,9 @@ export default function (pi: ExtensionAPI) {
 					);
 
 					if (edited === undefined) {
-						// User cancelled
 						return;
 					}
 
-					// Validate before saving
 					try {
 						const parsed = JSON.parse(edited);
 						if (!Array.isArray(parsed.hooks)) {
@@ -259,7 +329,6 @@ export default function (pi: ExtensionAPI) {
 							);
 							return;
 						}
-						// Write the raw edited text back
 						writeConfigAtPath(config.path, parsed.hooks as HookEntry[]);
 						ctx.ui.notify(
 							`${target === "project" ? "Project" : "Global"} config updated.`,

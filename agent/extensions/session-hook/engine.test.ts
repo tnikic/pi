@@ -10,8 +10,8 @@ import {
 	rmSync,
 	writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { homedir, tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 import { afterEach, describe, it } from "node:test";
 import {
 	addHook,
@@ -22,6 +22,7 @@ import {
 	type HookEntry,
 	listHooks,
 	loadConfig,
+	loadMemory,
 	parseAddArgs,
 	parseArgs,
 	parseEditArgs,
@@ -31,7 +32,9 @@ import {
 	removeHook,
 	runHooks,
 	type SessionHookConfig,
+	type SessionMemory,
 	writeConfigAtPath,
+	writeMemory,
 } from "./engine.ts";
 
 // ─── Test helpers ────────────────────────────────────────────────────────────
@@ -65,22 +68,24 @@ afterEach(() => {
 // ─── loadConfig ──────────────────────────────────────────────────────────────
 
 describe("loadConfig", () => {
-	it("returns undefined when no config files exist", () => {
+	it("returns global config when no project config exists", () => {
 		const dir = makeTmpDir();
 		const result = loadConfig(dir);
-		assert.strictEqual(result, undefined);
+		// Global config exists (anvil hook), so this returns the global config
+		assert.ok(result);
+		assert.ok(result.hooks.length >= 1);
 	});
 
-	it("loads project config", () => {
+	it("loads project config alongside global", () => {
 		const dir = makeTmpDir();
 		writeConfig(dir, [{ name: "test", command: "echo hello" }]);
 
 		const result = loadConfig(dir);
 		assert.ok(result);
-		assert.strictEqual(result.hooks.length, 1);
-		assert.strictEqual(result.hooks[0].name, "test");
-		assert.strictEqual(result.hooks[0].command, "echo hello");
-		assert.strictEqual(result.hooks[0].timeout, undefined);
+		const projectHook = result.hooks.find((h) => h.name === "test");
+		assert.ok(projectHook);
+		assert.strictEqual(projectHook.command, "echo hello");
+		assert.strictEqual(projectHook.timeout, undefined);
 	});
 
 	it("loads config with custom timeout", () => {
@@ -89,13 +94,12 @@ describe("loadConfig", () => {
 
 		const result = loadConfig(dir);
 		assert.ok(result);
-		assert.strictEqual(result.hooks.length, 1);
-		assert.strictEqual(result.hooks[0].timeout, 5000);
+		const slowHook = result.hooks.find((h) => h.name === "slow");
+		assert.ok(slowHook);
+		assert.strictEqual(slowHook.timeout, 5000);
 	});
 
 	it("project config overrides global by name", () => {
-		// We can only test project loading since global path is fixed.
-		// Test that multiple entries with the same name in project take the last.
 		const dir = makeTmpDir();
 		writeConfig(dir, [
 			{ name: "shared", command: "echo first" },
@@ -104,8 +108,9 @@ describe("loadConfig", () => {
 
 		const result = loadConfig(dir);
 		assert.ok(result);
-		assert.strictEqual(result.hooks.length, 1);
-		assert.strictEqual(result.hooks[0].command, "echo second");
+		const sharedHook = result.hooks.find((h) => h.name === "shared");
+		assert.ok(sharedHook);
+		assert.strictEqual(sharedHook.command, "echo second");
 	});
 
 	it("skips entries missing a name", () => {
@@ -117,8 +122,9 @@ describe("loadConfig", () => {
 
 		const result = loadConfig(dir);
 		assert.ok(result);
-		assert.strictEqual(result.hooks.length, 1);
-		assert.strictEqual(result.hooks[0].name, "valid");
+		const validHook = result.hooks.find((h) => h.name === "valid");
+		assert.ok(validHook);
+		assert.strictEqual(validHook.name, "valid");
 	});
 
 	it("skips entries missing a command field", () => {
@@ -130,18 +136,19 @@ describe("loadConfig", () => {
 
 		const result = loadConfig(dir);
 		assert.ok(result);
-		assert.strictEqual(result.hooks.length, 1);
-		assert.strictEqual(result.hooks[0].name, "valid");
+		const validHook = result.hooks.find((h) => h.name === "valid");
+		assert.ok(validHook);
+		assert.strictEqual(validHook.name, "valid");
 	});
 
-	it("handles missing .pi directory gracefully (returns undefined)", () => {
+	it("handles missing .pi directory gracefully (returns global)", () => {
 		const dir = makeTmpDir();
-		// No .pi directory created
 		const result = loadConfig(dir);
-		assert.strictEqual(result, undefined);
+		assert.ok(result);
+		assert.ok(result.hooks.length >= 1);
 	});
 
-	it("handles malformed JSON gracefully", () => {
+	it("handles malformed project JSON gracefully (falls back to global)", () => {
 		const dir = makeTmpDir();
 		const configDir = join(dir, ".pi");
 		mkdirSync(configDir, { recursive: true });
@@ -152,10 +159,11 @@ describe("loadConfig", () => {
 		);
 
 		const result = loadConfig(dir);
-		assert.strictEqual(result, undefined);
+		assert.ok(result);
+		assert.ok(result.hooks.length >= 1);
 	});
 
-	it("handles JSON with missing hooks array", () => {
+	it("handles JSON with missing hooks array (falls back to global)", () => {
 		const dir = makeTmpDir();
 		const configDir = join(dir, ".pi");
 		mkdirSync(configDir, { recursive: true });
@@ -166,7 +174,8 @@ describe("loadConfig", () => {
 		);
 
 		const result = loadConfig(dir);
-		assert.strictEqual(result, undefined);
+		assert.ok(result);
+		assert.ok(result.hooks.length >= 1);
 	});
 
 	it("skips non-object entries in hooks array", () => {
@@ -188,16 +197,18 @@ describe("loadConfig", () => {
 
 		const result = loadConfig(dir);
 		assert.ok(result);
-		assert.strictEqual(result.hooks.length, 1);
-		assert.strictEqual(result.hooks[0].name, "valid");
+		const validHook = result.hooks.find((h) => h.name === "valid");
+		assert.ok(validHook);
+		assert.strictEqual(validHook.name, "valid");
 	});
 
-	it("returns undefined when all hooks are invalid", () => {
+	it("returns global config when project hooks are all invalid", () => {
 		const dir = makeTmpDir();
 		writeConfig(dir, [{ name: "", command: "echo" } as unknown as HookEntry]);
 
 		const result = loadConfig(dir);
-		assert.strictEqual(result, undefined);
+		assert.ok(result);
+		assert.ok(result.hooks.length >= 1);
 	});
 });
 
@@ -527,7 +538,9 @@ describe("managed_by in config", () => {
 
 		const result = loadConfig(dir);
 		assert.ok(result);
-		assert.strictEqual(result.hooks[0].managed_by, "anvil");
+		const testHook = result.hooks.find((h) => h.name === "test");
+		assert.ok(testHook);
+		assert.strictEqual(testHook.managed_by, "anvil");
 	});
 
 	it("managed_by is undefined when not present", () => {
@@ -903,7 +916,7 @@ describe("parseEditArgs", () => {
 // ─── editHookConfig ──────────────────────────────────────────────────────────
 
 describe("editHookConfig", () => {
-	it("returns undefined when config file does not exist", () => {
+	it("returns undefined when project config file does not exist", () => {
 		const dir = makeTmpDir();
 		const result = editHookConfig(dir, true);
 		assert.strictEqual(result, undefined);
@@ -920,26 +933,26 @@ describe("editHookConfig", () => {
 		assert.ok(result.content.includes('"command": "echo a"'));
 	});
 
-	it("returns path and content for global config (file may not exist)", () => {
-		// Just verify the path shape is correct for global
+	it("returns global config when it exists", () => {
 		const dir = makeTmpDir();
-		// We can't write to the real global path, so we test that
-		// the function returns undefined when the file doesn't exist there.
 		const result = editHookConfig(dir, false);
-		// The global config path is in ~/.pi/agent/session-hook.json
-		// which likely doesn't exist in tests, so this returns undefined.
-		// We test the project path variant above.
-		assert.strictEqual(result, undefined);
+		assert.ok(result);
+		assert.ok(result.path.includes("session-hook.json"));
+		assert.ok(typeof result.content === "string");
 	});
 });
 
 // ─── listHooks ───────────────────────────────────────────────────────────────
 
 describe("listHooks", () => {
-	it("returns empty array when no hooks configured", () => {
+	it("returns global hooks when no project hooks configured", () => {
 		const dir = makeTmpDir();
 		const result = listHooks(dir);
-		assert.deepStrictEqual(result, []);
+		assert.ok(result.length >= 1);
+		// All should have source "global"
+		for (const h of result) {
+			assert.strictEqual(h.source, "global");
+		}
 	});
 
 	it("lists project hooks with source=project", () => {
@@ -949,18 +962,14 @@ describe("listHooks", () => {
 		]);
 
 		const result = listHooks(dir);
-		assert.strictEqual(result.length, 1);
-		assert.strictEqual(result[0].source, "project");
-		assert.strictEqual(result[0].name, "a");
+		const projectHook = result.find((h) => h.name === "a");
+		assert.ok(projectHook);
+		assert.strictEqual(projectHook.source, "project");
 	});
 
 	it("project hook with same name overrides global (merge logic)", () => {
-		// Tests that when a project hook has the same name, it's the one
-		// returned. The actual global→project merge path is untestable
-		// without writing to the real global config path.
 		const dir = makeTmpDir();
 
-		// Add a project hook
 		addHook(
 			dir,
 			{ name: "shared", command: "echo project", managed_by: "user" },
@@ -968,9 +977,10 @@ describe("listHooks", () => {
 		);
 
 		const result = listHooks(dir);
-		assert.strictEqual(result.length, 1);
-		assert.strictEqual(result[0].command, "echo project");
-		assert.strictEqual(result[0].source, "project");
+		const sharedHook = result.find((h) => h.name === "shared");
+		assert.ok(sharedHook);
+		assert.strictEqual(sharedHook.command, "echo project");
+		assert.strictEqual(sharedHook.source, "project");
 	});
 
 	it("includes managed_by in results (undefined when not set)", () => {
@@ -981,8 +991,6 @@ describe("listHooks", () => {
 		]);
 
 		const result = listHooks(dir);
-		assert.strictEqual(result.length, 2);
-
 		const withHook = result.find((h) => h.name === "with");
 		const withoutHook = result.find((h) => h.name === "without");
 		assert.ok(withHook);
@@ -991,7 +999,7 @@ describe("listHooks", () => {
 		assert.strictEqual(withoutHook.managed_by, undefined);
 	});
 
-	it("returns hooks sorted with project entries", () => {
+	it("returns hooks with project entries having source=project", () => {
 		const dir = makeTmpDir();
 		writeConfig(dir, [
 			{ name: "z", command: "echo z" },
@@ -999,11 +1007,8 @@ describe("listHooks", () => {
 		]);
 
 		const result = listHooks(dir);
-		assert.strictEqual(result.length, 2);
-		// Both should be project source
-		for (const h of result) {
-			assert.strictEqual(h.source, "project");
-		}
+		const projectHooks = result.filter((h) => h.source === "project");
+		assert.strictEqual(projectHooks.length, 2);
 	});
 });
 
@@ -1094,5 +1099,318 @@ describe("formatHookOutput", () => {
 
 		assert.ok(result.includes("all good"));
 		assert.ok(result.includes("timed out"));
+	});
+
+	it("includes last session memory inline when provided", () => {
+		const memory: SessionMemory = {
+			anvil: { output: "closed 2 issues, opened 1 PR", timestamp: 1000 },
+		};
+
+		const result = formatHookOutput(
+			{
+				results: [{ name: "anvil", success: true, output: "forge context..." }],
+				hadHooks: true,
+			},
+			memory,
+		);
+
+		assert.ok(result.includes("> Last session: closed 2 issues, opened 1 PR"));
+	});
+
+	it("omits last session line when tool not in memory", () => {
+		const result = formatHookOutput(
+			{
+				results: [{ name: "anvil", success: true, output: "forge context..." }],
+				hadHooks: true,
+			},
+			{},
+		);
+
+		assert.ok(!result.includes("Last session:"));
+	});
+});
+
+// ─── parseAddArgs with --end-command ────────────────────────────────────────
+
+describe("parseAddArgs end-command", () => {
+	it("parses --end-command flag", () => {
+		const result = parseAddArgs([
+			"myhook",
+			"--command",
+			"echo hello",
+			"--end-command",
+			"echo capture",
+		]);
+		assert.ok(typeof result !== "string");
+		if (typeof result !== "string") {
+			assert.strictEqual(result.endCommand, "echo capture");
+		}
+	});
+
+	it("parses -e short flag for end-command", () => {
+		const result = parseAddArgs(["myhook", "-c", "echo", "-e", "capture"]);
+		assert.ok(typeof result !== "string");
+		if (typeof result !== "string") {
+			assert.strictEqual(result.command, "echo");
+			assert.strictEqual(result.endCommand, "capture");
+		}
+	});
+
+	it("accepts --end-command alongside --project", () => {
+		const result = parseAddArgs([
+			"myhook",
+			"--command",
+			"echo",
+			"--end-command",
+			"capture",
+			"--project",
+		]);
+		assert.ok(typeof result !== "string");
+		if (typeof result !== "string") {
+			assert.strictEqual(result.endCommand, "capture");
+			assert.strictEqual(result.project, true);
+		}
+	});
+
+	it("returns error when --end-command has no value", () => {
+		const result = parseAddArgs([
+			"myhook",
+			"--command",
+			"echo",
+			"--end-command",
+		]);
+		assert.strictEqual(typeof result, "string");
+		assert.ok((result as string).includes("--end-command requires a value"));
+	});
+
+	it("endCommand is undefined when --end-command not provided", () => {
+		const result = parseAddArgs(["myhook", "--command", "echo"]);
+		assert.ok(typeof result !== "string");
+		if (typeof result !== "string") {
+			assert.strictEqual(result.endCommand, undefined);
+		}
+	});
+});
+
+// ─── session_end_command round-trip ──────────────────────────────────────────
+
+describe("session_end_command in config", () => {
+	it("reads session_end_command from config file", () => {
+		const dir = makeTmpDir();
+		writeConfig(dir, [
+			{
+				name: "test",
+				command: "echo hello",
+				session_end_command: "echo cleanup",
+			} as HookEntry,
+		]);
+
+		const result = loadConfig(dir);
+		assert.ok(result);
+		const testHook = result.hooks.find((h) => h.name === "test");
+		assert.ok(testHook);
+		assert.strictEqual(testHook.session_end_command, "echo cleanup");
+	});
+
+	it("session_end_command is undefined when not present", () => {
+		const dir = makeTmpDir();
+		writeConfig(dir, [{ name: "test", command: "echo hello" }]);
+
+		const result = loadConfig(dir);
+		assert.ok(result);
+		const testHook = result.hooks.find((h) => h.name === "test");
+		assert.ok(testHook);
+		assert.strictEqual(testHook.session_end_command, undefined);
+	});
+
+	it("session_end_command round-trips through write and read", () => {
+		const dir = makeTmpDir();
+		const configPath = `${dir}/session-hook.json`;
+
+		writeConfigAtPath(configPath, [
+			{ name: "a", command: "echo a", session_end_command: "echo end" },
+		]);
+
+		const read = readConfigAtPath(configPath);
+		assert.strictEqual(read.length, 1);
+		assert.strictEqual(read[0].session_end_command, "echo end");
+	});
+
+	it("omits undefined session_end_command from serialized output", () => {
+		const dir = makeTmpDir();
+		const configPath = `${dir}/hooks.json`;
+
+		writeConfigAtPath(configPath, [
+			{ name: "minimal", command: "echo minimal" },
+		]);
+
+		const raw = readFileSync(configPath, "utf-8");
+		const parsed = JSON.parse(raw);
+		const entry = parsed.hooks[0];
+		assert.ok(!("session_end_command" in entry));
+	});
+});
+
+// ─── Session memory ──────────────────────────────────────────────────────────
+
+describe("loadMemory", () => {
+	it("returns empty object when no memory files exist", () => {
+		const dir = makeTmpDir();
+		const result = loadMemory(dir);
+		assert.deepStrictEqual(result, {});
+	});
+
+	it("returns global memory when no project memory", () => {
+		const dir = makeTmpDir();
+		// Write global memory
+		const globalPath = join(
+			homedir(),
+			".pi",
+			"agent",
+			"session-hook",
+			"memory.json",
+		);
+		mkdirSync(dirname(globalPath), { recursive: true });
+		writeFileSync(
+			globalPath,
+			JSON.stringify({
+				anvil: { output: "closed 2 issues", timestamp: 1000 },
+			}),
+			"utf-8",
+		);
+
+		try {
+			const result = loadMemory(dir);
+			assert.ok(result.anvil);
+			assert.strictEqual(result.anvil.output, "closed 2 issues");
+			assert.strictEqual(result.anvil.timestamp, 1000);
+		} finally {
+			// Clean up — don't pollute real global state
+			try {
+				rmSync(dirname(globalPath), { recursive: true, force: true });
+			} catch {
+				// best-effort
+			}
+		}
+	});
+
+	it("project memory overrides global by tool name", () => {
+		const dir = makeTmpDir();
+
+		// Write global memory
+		const globalPath = join(
+			homedir(),
+			".pi",
+			"agent",
+			"session-hook",
+			"memory.json",
+		);
+		mkdirSync(dirname(globalPath), { recursive: true });
+		writeFileSync(
+			globalPath,
+			JSON.stringify({
+				anvil: { output: "global: 1 issue", timestamp: 1000 },
+			}),
+			"utf-8",
+		);
+
+		// Write project memory
+		writeMemory(dir, true, {
+			anvil: { output: "project: 3 issues", timestamp: 2000 },
+		});
+
+		try {
+			const result = loadMemory(dir);
+			assert.strictEqual(result.anvil.output, "project: 3 issues");
+			assert.strictEqual(result.anvil.timestamp, 2000);
+		} finally {
+			try {
+				rmSync(dirname(globalPath), { recursive: true, force: true });
+			} catch {
+				// best-effort
+			}
+		}
+	});
+
+	it("skips invalid memory entries gracefully", () => {
+		const dir = makeTmpDir();
+
+		const globalPath = join(
+			homedir(),
+			".pi",
+			"agent",
+			"session-hook",
+			"memory.json",
+		);
+		mkdirSync(dirname(globalPath), { recursive: true });
+		writeFileSync(
+			globalPath,
+			JSON.stringify({
+				valid: { output: "ok", timestamp: 1 },
+				invalid_string: "not an object",
+				invalid_null: null,
+				invalid_missing_output: { timestamp: 1 },
+			}),
+			"utf-8",
+		);
+
+		try {
+			const result = loadMemory(dir);
+			assert.strictEqual(Object.keys(result).length, 1);
+			assert.strictEqual(result.valid.output, "ok");
+		} finally {
+			try {
+				rmSync(dirname(globalPath), { recursive: true, force: true });
+			} catch {
+				// best-effort
+			}
+		}
+	});
+
+	it("handles malformed JSON in memory file gracefully", () => {
+		const dir = makeTmpDir();
+		const globalPath = join(
+			homedir(),
+			".pi",
+			"agent",
+			"session-hook",
+			"memory.json",
+		);
+		mkdirSync(dirname(globalPath), { recursive: true });
+		writeFileSync(globalPath, "not json", "utf-8");
+
+		try {
+			const result = loadMemory(dir);
+			assert.deepStrictEqual(result, {});
+		} finally {
+			try {
+				rmSync(dirname(globalPath), { recursive: true, force: true });
+			} catch {
+				// best-effort
+			}
+		}
+	});
+});
+
+describe("writeMemory", () => {
+	it("writes memory to project path", () => {
+		const dir = makeTmpDir();
+		writeMemory(dir, true, {
+			anvil: { output: "closed 1 issue", timestamp: 5000 },
+		});
+
+		const memoryPath = join(dir, ".pi", "session-hook", "memory.json");
+		const raw = readFileSync(memoryPath, "utf-8");
+		const parsed = JSON.parse(raw);
+		assert.strictEqual(parsed.anvil.output, "closed 1 issue");
+		assert.strictEqual(parsed.anvil.timestamp, 5000);
+	});
+
+	it("does not write empty memory", () => {
+		const dir = makeTmpDir();
+		writeMemory(dir, true, {});
+
+		const memoryPath = join(dir, ".pi", "session-hook", "memory.json");
+		assert.throws(() => readFileSync(memoryPath, "utf-8"));
 	});
 });

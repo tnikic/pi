@@ -15,6 +15,7 @@ export interface HookEntry {
 	command: string;
 	timeout?: number;
 	managed_by?: string;
+	session_end_command?: string;
 }
 
 export interface HookEntryWithSource extends HookEntry {
@@ -41,6 +42,13 @@ export interface HookRunState {
 	hadHooks: boolean;
 }
 
+export interface SessionMemory {
+	[toolName: string]: {
+		output: string;
+		timestamp: number;
+	};
+}
+
 // ─── Defaults ────────────────────────────────────────────────────────────────
 
 export const DEFAULT_TIMEOUT_MS = 10_000;
@@ -54,9 +62,18 @@ export const GLOBAL_CONFIG_PATH = join(
 	"session-hook.json",
 );
 const PROJECT_CONFIG_NAME = "session-hook.json";
+const MEMORY_FILE_NAME = "memory.json";
 
 function projectConfigPath(cwd: string): string {
 	return join(cwd, ".pi", PROJECT_CONFIG_NAME);
+}
+
+function globalMemoryPath(): string {
+	return join(homedir(), ".pi", "agent", "session-hook", MEMORY_FILE_NAME);
+}
+
+function projectMemoryPath(cwd: string): string {
+	return join(cwd, ".pi", "session-hook", MEMORY_FILE_NAME);
 }
 
 /**
@@ -79,7 +96,19 @@ function parseHookEntry(raw: unknown): HookEntry | undefined {
 			? e.managed_by
 			: undefined;
 
-	return { name: e.name, command: e.command, timeout, managed_by };
+	const session_end_command =
+		typeof e.session_end_command === "string" &&
+		e.session_end_command.length > 0
+			? e.session_end_command
+			: undefined;
+
+	return {
+		name: e.name,
+		command: e.command,
+		timeout,
+		managed_by,
+		session_end_command,
+	};
 }
 
 /**
@@ -234,6 +263,8 @@ function serializeHooks(hooks: HookEntry[]): string {
 		};
 		if (h.timeout !== undefined) entry.timeout = h.timeout;
 		if (h.managed_by !== undefined) entry.managed_by = h.managed_by;
+		if (h.session_end_command !== undefined)
+			entry.session_end_command = h.session_end_command;
 		return entry;
 	});
 	return `${JSON.stringify({ hooks: entries }, null, "\t")}\n`;
@@ -308,15 +339,22 @@ export function parseArgs(raw: string): string[] {
 export function parseAddArgs(
 	args: string[],
 ):
-	| { name: string; command: string; timeout?: number; project: boolean }
+	| {
+			name: string;
+			command: string;
+			timeout?: number;
+			endCommand?: string;
+			project: boolean;
+	  }
 	| string {
 	if (args.length < 1) {
-		return "Usage: /session-hook add <name> --command <cmd> [--timeout <ms>] [--project]";
+		return "Usage: /session-hook add <name> --command <cmd> [--timeout <ms>] [--end-command <cmd>] [--project]";
 	}
 
 	const name = args[0];
 	let command: string | undefined;
 	let timeout: number | undefined;
+	let endCommand: string | undefined;
 	let project = false;
 
 	for (let i = 1; i < args.length; i++) {
@@ -338,6 +376,13 @@ export function parseAddArgs(
 			} else {
 				return "--timeout requires a value";
 			}
+		} else if (args[i] === "--end-command" || args[i] === "-e") {
+			if (i + 1 < args.length) {
+				endCommand = args[i + 1];
+				i++;
+			} else {
+				return "--end-command requires a value";
+			}
 		} else if (args[i] === "--project") {
 			project = true;
 		} else {
@@ -349,7 +394,7 @@ export function parseAddArgs(
 		return "--command is required";
 	}
 
-	return { name, command, timeout, project };
+	return { name, command, timeout, endCommand, project };
 }
 
 // ─── Remove operation ───────────────────────────────────────────────────────
@@ -528,15 +573,86 @@ export function parseEditArgs(args: string[]): { project: boolean } | string {
 	return { project };
 }
 
+// ─── Session memory ─────────────────────────────────────────────────────────
+
+/**
+ * Read session memory from the merged set of global and project memory files.
+ * Project memory overrides global by tool name.
+ */
+export function loadMemory(cwd: string): SessionMemory {
+	const memory: SessionMemory = {};
+
+	// Load global memory first
+	try {
+		const raw = readFileSync(globalMemoryPath(), "utf-8");
+		const parsed = JSON.parse(raw) as Record<string, unknown>;
+		for (const [key, value] of Object.entries(parsed)) {
+			if (
+				value != null &&
+				typeof value === "object" &&
+				typeof (value as Record<string, unknown>).output === "string" &&
+				typeof (value as Record<string, unknown>).timestamp === "number"
+			) {
+				memory[key] = value as SessionMemory[string];
+			}
+		}
+	} catch {
+		// File missing or malformed — skip gracefully
+	}
+
+	// Project memory overrides
+	try {
+		const raw = readFileSync(projectMemoryPath(cwd), "utf-8");
+		const parsed = JSON.parse(raw) as Record<string, unknown>;
+		for (const [key, value] of Object.entries(parsed)) {
+			if (
+				value != null &&
+				typeof value === "object" &&
+				typeof (value as Record<string, unknown>).output === "string" &&
+				typeof (value as Record<string, unknown>).timestamp === "number"
+			) {
+				memory[key] = value as SessionMemory[string];
+			}
+		}
+	} catch {
+		// File missing or malformed — skip gracefully
+	}
+
+	return memory;
+}
+
+/**
+ * Write session memory for a specific project or global scope.
+ */
+export function writeMemory(
+	cwd: string,
+	project: boolean,
+	memory: SessionMemory,
+): void {
+	const targetPath = project ? projectMemoryPath(cwd) : globalMemoryPath();
+
+	if (Object.keys(memory).length === 0) {
+		// Don't write empty files
+		return;
+	}
+
+	mkdirSync(dirname(targetPath), { recursive: true });
+	writeFileSync(targetPath, `${JSON.stringify(memory, null, "\t")}\n`, "utf-8");
+}
+
 // ─── Output formatting ───────────────────────────────────────────────────────
 
 const HEADER = "## Session Hooks — ambient context from registered tools";
 
 /**
  * Format hook results into a single markdown string for injection.
+ * When memory is provided, inline a compact "last session:" line per tool.
  * Returns empty string if there are no hooks.
  */
-export function formatHookOutput(state: HookRunState): string {
+export function formatHookOutput(
+	state: HookRunState,
+	memory?: SessionMemory,
+): string {
 	if (!state.hadHooks) return "";
 
 	const parts: string[] = [HEADER, ""];
@@ -553,6 +669,13 @@ export function formatHookOutput(state: HookRunState): string {
 		} else {
 			parts.push(`> ⚠ ${result.error ?? "Unknown error"}`);
 		}
+
+		// Inline previous session summary if available
+		if (memory?.[result.name]) {
+			const prev = memory[result.name];
+			parts.push(`> Last session: ${prev.output}`);
+		}
+
 		parts.push("");
 	}
 
